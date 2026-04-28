@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scrapify — Shopify 独立站采集系统</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --brand: #5B47E0;
+  --brand-light: #EDE9FC;
+  --brand-mid: #7C6AE8;
+  --bg: #F5F4F8;
+  --surface: #FFFFFF;
+  --surface2: #F8F7FB;
+  --border: rgba(0,0,0,0.08);
+  --border2: rgba(0,0,0,0.14);
+  --text: #1A1824;
+  --text2: #6B6880;
+  --text3: #A09DB8;
+  --green: #10B981;
+  --green-bg: #ECFDF5;
+  --green-text: #059669;
+  --red: #EF4444;
+  --red-bg: #FEF2F2;
+  --red-text: #DC2626;
+  --amber: #F59E0B;
+  --amber-bg: #FFFBEB;
+  --amber-text: #D97706;
+  --blue: #3B82F6;
+  --blue-bg: #EFF6FF;
+  --blue-text: #2563EB;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --sidebar: 210px;
+  --topbar: 54px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ─── SIDEBAR ─── */
+.sidebar {
+  width: var(--sidebar);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.logo {
+  padding: 16px 14px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.logo-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--brand);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.logo-icon svg { width: 15px; height: 15px; }
+
+.logo-name { font-size: 15px; font-weight: 600; color: var(--text); }
+
+.logo-plan {
+  margin-left: auto;
+  font-size: 10px; font-weight: 600;
+  background: var(--brand-light); color: var(--brand);
+  border-radius: 5px; padding: 2px 7px;
+}
+
+.nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
+
+.nav-section {
+  font-size: 10px; font-weight: 600;
+  color: var(--text3);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 10px 8px 5px;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px; font-weight: 500;
+  color: var(--text2);
+  margin-bottom: 2px;
+  transition: all .15s;
+  position: relative;
+  user-select: none;
+}
+
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+
+.nav-item.active {
+  background: var(--brand-light);
+  color: var(--brand);
+}
+
+.nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+.nav-badge {
+  margin-left: auto;
+  font-size: 10px; font-weight: 600;
+  background: var(--brand);
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.pulse {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-left: auto;
+  flex-shrink: 0;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+.sidebar-footer {
+  padding: 10px 8px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.user-card {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.user-card:hover { background: var(--surface2); }
+
+.avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--brand);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; color: #fff;
+  flex-shrink: 0;
+}
+
+.user-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.user-plan { font-size: 11px; color: var(--text3); }
+
+/* ─── MAIN ─── */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  height: var(--topbar);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 10px;
+  flex-shrink: 0;
+}
+
+.page-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.page-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
+.spacer { flex: 1; }
+
+.btn {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 500;
+  padding: 6px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.btn:hover { background: var(--surface2); color: var(--text); }
+
+.btn.primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+
+.btn.primary:hover { background: var(--brand-mid); }
+
+.btn svg { width: 13px; height: 13px; }
+
+/* ─── CONTENT ─── */
+.content {
+  flex: 1; overflow-y: auto;
+  padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+/* pages */
+.page { display: none; flex-direction: column; gap: 14px; }
+.page.active { display: flex; }
+
+/* stats */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.stat-label { font-size: 11px; color: var(--text2); margin-bottom: 5px; }
+
+.stat-val { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; }
+
+.stat-change { font-size: 11px; color: var(--green-text); margin-top: 4px; }
+.stat-change.down { color: var(--red-text); }
+.stat-change.neutral { color: var(--text3); }
+
+/* panel */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+
+.panel-title { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; }
+
+.panel-action {
+  font-size: 12px; color: var(--brand);
+  cursor: pointer; font-weight: 500;
+}
+
+.panel-action:hover { text-decoration: underline; }
+
+/* table header */
+.tbl-head {
+  display: flex; padding: 6px 16px;
+  font-size: 10px; font-weight: 600;
+  color: var(--text3);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+/* task rows */
+.task-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  transition: background .1s;
+}
+
+.task-row:last-child { border-bottom: none; }
+.task-row:hover { background: var(--surface2); }
+
+.task-url {
+  flex: 1; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+}
+
+.tag {
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 10px; font-weight: 600;
+}
+
+.tag.run { background: var(--green-bg); color: var(--green-text); }
+.tag.done { background: var(--brand-light); color: var(--brand); }
+.tag.err { background: var(--red-bg); color: var(--red-text); }
+.tag.wait { background: var(--amber-bg); color: var(--amber-text); }
+
+.progress-wrap {
+  width: 60px; height: 5px;
+  background: var(--bg);
+  border-radius: 3px; overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%; border-radius: 3px;
+  background: var(--brand);
+  transition: width 1s ease;
+}
+
+.progress-bar.err { background: var(--red); }
+
+.task-num { width: 52px; text-align: center; color: var(--text2); }
+.task-time { width: 38px; text-align: right; color: var(--text3); font-size: 11px; }
+
+/* grid2 */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* field rows */
+.field-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.field-row:last-child { border-bottom: none; }
+
+.check-box {
+  width: 15px; height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border2);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.check-box.on {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.field-name { flex: 1; color: var(--text); }
+
+.field-type {
+  font-size: 10px; font-weight: 500;
+  color: var(--text3);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 2px 7px; border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* mini bars */
+.mini-bars { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+.mini-bar-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+
+.mini-bar-label { width: 56px; color: var(--text2); }
+
+.mini-bar-track {
+  flex: 1; height: 6px;
+  background: var(--bg);
+  border-radius: 3px; overflow: hidden;
+}
+
+.mini-bar-fill { height: 100%; border-radius: 3px; background: var(--brand); }
+.mini-bar-fill.green { background: var(--green); }
+.mini-bar-fill.amber { background: var(--amber); }
+
+.mini-bar-val { width: 30px; text-align: right; font-weight: 600; color: var(--text); font-size: 12px; }
+
+/* ─── MONITORING PAGE ─── */
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.monitor-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.mc-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+
+.mc-site { font-size: 11px; font-weight: 600; color: var(--text); }
+.mc-url { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 1px; }
+
+.mc-price { font-size: 20px; font-weight: 600; color: var(--text); }
+
+.mc-change {
+  font-size: 11px; font-weight: 500; margin-top: 3px;
+  display: flex; align-items: center; gap: 4px;
+}
+
+.mc-change.up { color: var(--red-text); }
+.mc-change.down { color: var(--green-text); }
+
+.sparkline { width: 100%; height: 40px; margin-top: 10px; }
+
+/* ─── PROXY PAGE ─── */
+.proxy-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.proxy-row:last-child { border-bottom: none; }
+.proxy-row:hover { background: var(--surface2); }
+
+.proxy-ip {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px; color: var(--text); flex: 1;
+}
+
+.proxy-country { color: var(--text2); width: 50px; }
+.proxy-latency { width: 44px; text-align: right; }
+.proxy-speed { width: 60px; }
+
+.latency-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+/* ─── MODAL ─── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(10,8,20,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+
+.modal {
+  background: var(--surface);
+  border-radius: 14px;
+  border: 1px solid var(--border2);
+  width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  transform: translateY(12px);
+  transition: transform .2s;
+}
+
+.modal-overlay.open .modal { transform: translateY(0); }
+
+.modal-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+}
+
+.modal-title { font-size: 15px; font-weight: 600; color: var(--text); flex: 1; }
+
+.modal-close {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text2);
+  font-size: 16px; line-height: 1;
+  transition: all .15s;
+}
+
+.modal-close:hover { background: var(--surface2); color: var(--text); }
+
+.modal-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+
+.form-label {
+  font-size: 12px; font-weight: 600;
+  color: var(--text2);
+}
+
+.form-input {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.form-input:focus { border-color: var(--brand); }
+
+.form-select {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  cursor: pointer;
+}
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.check-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.check-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all .15s;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.check-item.on {
+  border-color: var(--brand);
+  background: var(--brand-light);
+  color: var(--brand);
+}
+
+.check-item .check-box { width: 13px; height: 13px; }
+
+.modal-footer {
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 8px; justify-content: flex-end;
+}
+
+/* ─── EMPTY STATE ─── */
+.empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text3);
+  font-size: 13px;
+}
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ─── CHART ─── */
+.chart-area {
+  padding: 14px 16px;
+  position: relative;
+}
+
+canvas { display: block; }
+
+/* progress ring anim */
+@keyframes grow { from { width: 0; } }
+.progress-bar { animation: grow 1s ease forwards; }
+
+/* section divider */
+.section-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--text3);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 0 2px;
+}
+</style>
+</head>
+<body>
+
+<!-- ══ SIDEBAR ══ -->
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 15 15" fill="none">
+        <path d="M2 4h11M2 7.5h8M2 11h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="logo-name">Scrapify</div>
+    <div class="logo-plan">Pro</div>
+  </div>
+
+  <div class="nav">
+    <div class="nav-section">采集</div>
+    <div class="nav-item active" data-page="tasks" onclick="switchPage('tasks',this)">
+      <svg viewBox="0 0 15 15" fill="none"><rect x="1.5" y="1.5" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 5h6M4.5 7.5h6M4.5 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      任务中心
+      <div class="pulse"></div>
+    </div>
+    <div class="nav-item" data-page="schedule" onclick="switchPage('schedule',this)">
+      <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M7.5 4.5v3.5l2.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      调度计划
+    </div>
+    <div class="nav-item" data-page="fields" onclick="switchPage('fields',this)">
+      <svg viewBox="0 0 15 15" fill="none"><rect x="1.5" y="1.5" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 5.5h12M5.5 1.5v12" stroke="currentColor" stroke-width="1.3"/></svg>
+      字段配置
+    </div>
+
+    <div class="nav-section">数据</div>
+    <div class="nav-item" data-page="dashboard" onclick="switchPage('dashboard',this)">
+      <svg viewBox="0 0 15 15" fill="none"><path d="M1.5 11.5l3.5-4.5 3 3 3.5-5 2 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      数据看板
+    </div>
+    <div class="nav-item" data-page="monitor" onclick="switchPage('monitor',this)">
+      <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 1.5v12M1.5 7.5h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" stroke-width="1.3"/></svg>
+      价格监控
+      <div class="nav-badge">3</div>
+    </div>
+    <div class="nav-item" data-page="proxy" onclick="switchPage('proxy',this)">
+      <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 1.5C4.19 1.5 1.5 4.19 1.5 7.5s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 7.5h12M7.5 1.5c-1.5 1.5-2.5 3.5-2.5 6s1 4.5 2.5 6M7.5 1.5c1.5 1.5 2.5 3.5 2.5 6s-1 4.5-2.5 6" stroke="currentColor" stroke-width="1.3"/></svg>
+      代理管理
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="avatar">张</div>
+      <div>
+        <div class="user-name">张晓明</div>
+        <div class="user-plan">Pro · 剩余 18 天</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div class="main">
+  <!-- topbar (dynamic) -->
+  <div class="topbar">
+    <div>
+      <div class="page-title" id="topTitle">任务中心</div>
+      <div class="page-sub" id="topSub">管理与追踪所有采集任务</div>
+    </div>
+    <div class="spacer"></div>
+    <div id="topActions">
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="alert('已复制采集报告链接')">
+          <svg viewBox="0 0 13 13" fill="none"><path d="M8.5 1.5h3v3M11.5 1.5l-5 5M5.5 3.5h-4v8h8v-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          导出数据
+        </button>
+        <button class="btn primary" onclick="openModal()">
+          <svg viewBox="0 0 13 13" fill="none"><path d="M6.5 2v9M2 6.5h9" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>
+          新建任务
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ══ PAGE: TASKS ══ -->
+    <div class="page active" id="page-tasks">
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">今日采集商品</div>
+          <div class="stat-val">12,480</div>
+          <div class="stat-change">↑ 8.3% vs 昨日</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">运行中任务</div>
+          <div class="stat-val">7</div>
+          <div class="stat-change">↑ 2 个新增</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">采集成功率</div>
+          <div class="stat-val">96.2%</div>
+          <div class="stat-change down">↓ 1.1% 较昨日</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">代理消耗 / 今日</div>
+          <div class="stat-val">3.8 GB</div>
+          <div class="stat-change neutral">剩余 46.2 GB</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">采集任务列表</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" style="font-size:11px;padding:4px 10px">全部状态 ▾</button>
+            <button class="btn" style="font-size:11px;padding:4px 10px">排序 ▾</button>
+          </div>
+        </div>
+        <div class="tbl-head">
+          <span style="flex:1">站点 URL</span>
+          <span style="width:62px">状态</span>
+          <span style="width:70px">进度</span>
+          <span style="width:52px;text-align:center">商品数</span>
+          <span style="width:38px;text-align:right">耗时</span>
+        </div>
+
+        <div class="task-row">
+          <div class="task-url">gymshark.com/collections/all</div>
+          <div class="tag run">运行中</div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:72%"></div></div>
+          <div class="task-num">1,243</div>
+          <div class="task-time">4m12s</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url">fashionnova.com/collections/dresses</div>
+          <div class="tag done">完成</div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:100%"></div></div>
+          <div class="task-num">3,892</div>
+          <div class="task-time">12m</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url">allbirds.com/pages/all-products</div>
+          <div class="tag wait">等待中</div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:0%"></div></div>
+          <div class="task-num">—</div>
+          <div class="task-time">—</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url">bombas.com/collections/mens-socks</div>
+          <div class="tag err">报错</div>
+          <div class="progress-wrap"><div class="progress-bar err" style="width:38%"></div></div>
+          <div class="task-num">519</div>
+          <div class="task-time">2m31s</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url">ruggable.com/products</div>
+          <div class="tag run">运行中</div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:55%"></div></div>
+          <div class="task-num">876</div>
+          <div class="task-time">3m05s</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url">everlane.com/collections/new-arrivals</div>
+          <div class="tag done">完成</div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:100%"></div></div>
+          <div class="task-num">2,104</div>
+          <div class="task-time">8m40s</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url">cettire.com/collections/womens</div>
+          <div class="tag run">运行中</div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:30%"></div></div>
+          <div class="task-num">441</div>
+          <div class="task-time">1m52s</div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">采集字段配置</div>
+            <div class="panel-action">编辑字段</div>
+          </div>
+          <div class="field-row">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="field-name">商品标题</div>
+            <div class="field-type">String</div>
+          </div>
+          <div class="field-row">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="field-name">SKU / 变体</div>
+            <div class="field-type">Array</div>
+          </div>
+          <div class="field-row">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="field-name">售价 / 原价</div>
+            <div class="field-type">Number</div>
+          </div>
+          <div class="field-row">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="field-name">主图 / 图片组</div>
+            <div class="field-type">URL[]</div>
+          </div>
+          <div class="field-row">
+            <div class="check-box" style="background:var(--surface2)"></div>
+            <div class="field-name" style="color:var(--text3)">库存数量</div>
+            <div class="field-type">Number</div>
+          </div>
+          <div class="field-row">
+            <div class="check-box" style="background:var(--surface2)"></div>
+            <div class="field-name" style="color:var(--text3)">用户评分 / 评论数</div>
+            <div class="field-type">Float</div>
+          </div>
+          <div class="field-row">
+            <div class="check-box" style="background:var(--surface2)"></div>
+            <div class="field-name" style="color:var(--text3)">商品标签 / 分类</div>
+            <div class="field-type">String[]</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">分类采集分布</div>
+            <div class="panel-action">查看全部</div>
+          </div>
+          <div class="mini-bars">
+            <div class="mini-bar-row">
+              <div class="mini-bar-label">服装</div>
+              <div class="mini-bar-track"><div class="mini-bar-fill" style="width:84%"></div></div>
+              <div class="mini-bar-val">84%</div>
+            </div>
+            <div class="mini-bar-row">
+              <div class="mini-bar-label">鞋包</div>
+              <div class="mini-bar-track"><div class="mini-bar-fill" style="width:61%"></div></div>
+              <div class="mini-bar-val">61%</div>
+            </div>
+            <div class="mini-bar-row">
+              <div class="mini-bar-label">美妆</div>
+              <div class="mini-bar-track"><div class="mini-bar-fill" style="width:47%"></div></div>
+              <div class="mini-bar-val">47%</div>
+            </div>
+            <div class="mini-bar-row">
+              <div class="mini-bar-label">家居</div>
+              <div class="mini-bar-track"><div class="mini-bar-fill green" style="width:38%"></div></div>
+              <div class="mini-bar-val">38%</div>
+            </div>
+            <div class="mini-bar-row">
+              <div class="mini-bar-label">运动</div>
+              <div class="mini-bar-track"><div class="mini-bar-fill green" style="width:29%"></div></div>
+              <div class="mini-bar-val">29%</div>
+            </div>
+            <div class="mini-bar-row">
+              <div class="mini-bar-label">电子</div>
+              <div class="mini-bar-track"><div class="mini-bar-fill amber" style="width:12%"></div></div>
+              <div class="mini-bar-val">12%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: SCHEDULE ══ -->
+    <div class="page" id="page-schedule">
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">计划任务总数</div>
+          <div class="stat-val">14</div>
+          <div class="stat-change">本周新增 3 个</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">今日已触发</div>
+          <div class="stat-val">6</div>
+          <div class="stat-change">成功率 100%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">下次执行</div>
+          <div class="stat-val" style="font-size:16px">10 分钟后</div>
+          <div class="stat-change neutral">gymshark 全量</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">平均执行周期</div>
+          <div class="stat-val">4h</div>
+          <div class="stat-change neutral">支持 Cron 表达式</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">定时计划列表</div>
+          <button class="btn primary" style="font-size:12px;padding:5px 12px">+ 新建计划</button>
+        </div>
+        <div class="tbl-head">
+          <span style="flex:1">计划名称</span>
+          <span style="width:90px">执行周期</span>
+          <span style="width:80px">上次执行</span>
+          <span style="width:80px">下次执行</span>
+          <span style="width:52px">状态</span>
+        </div>
+        <div class="task-row">
+          <div class="task-url" style="font-family:'DM Sans',sans-serif">Gymshark 全量同步</div>
+          <div style="width:90px;font-size:11px;color:var(--text2)">每 4 小时</div>
+          <div style="width:80px;font-size:11px;color:var(--text3)">09:00</div>
+          <div style="width:80px;font-size:11px;color:var(--brand);font-weight:500">13:00</div>
+          <div class="tag run">启用</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url" style="font-family:'DM Sans',sans-serif">FashionNova 价格监控</div>
+          <div style="width:90px;font-size:11px;color:var(--text2)">每 1 小时</div>
+          <div style="width:80px;font-size:11px;color:var(--text3)">12:00</div>
+          <div style="width:80px;font-size:11px;color:var(--brand);font-weight:500">13:00</div>
+          <div class="tag run">启用</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url" style="font-family:'DM Sans',sans-serif">Allbirds 新品扫描</div>
+          <div style="width:90px;font-size:11px;color:var(--text2)">每天 08:00</div>
+          <div style="width:80px;font-size:11px;color:var(--text3)">昨天 08:00</div>
+          <div style="width:80px;font-size:11px;color:var(--brand);font-weight:500">明天 08:00</div>
+          <div class="tag done">启用</div>
+        </div>
+        <div class="task-row">
+          <div class="task-url" style="font-family:'DM Sans',sans-serif">Ruggable 库存变动</div>
+          <div style="width:90px;font-size:11px;color:var(--text2)">每 30 分钟</div>
+          <div style="width:80px;font-size:11px;color:var(--text3)">12:30</div>
+          <div style="width:80px;font-size:11px;color:var(--text3)">—</div>
+          <div class="tag wait">暂停</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: FIELDS ══ -->
+    <div class="page" id="page-fields">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">全局字段配置</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn">重置默认</button>
+            <button class="btn primary">保存配置</button>
+          </div>
+        </div>
+        <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div>
+              <div class="field-name">商品标题</div>
+              <div style="font-size:10px;color:var(--text3)">product.title</div>
+            </div>
+            <div class="field-type">String</div>
+          </div>
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div>
+              <div class="field-name">SKU / 变体</div>
+              <div style="font-size:10px;color:var(--text3)">product.variants</div>
+            </div>
+            <div class="field-type">Array</div>
+          </div>
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div>
+              <div class="field-name">售价 / 原价</div>
+              <div style="font-size:10px;color:var(--text3)">variant.price / compare_at_price</div>
+            </div>
+            <div class="field-type">Number</div>
+          </div>
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div>
+              <div class="field-name">主图 / 图片组</div>
+              <div style="font-size:10px;color:var(--text3)">product.images</div>
+            </div>
+            <div class="field-type">URL[]</div>
+          </div>
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div>
+              <div class="field-name">商品描述</div>
+              <div style="font-size:10px;color:var(--text3)">product.body_html</div>
+            </div>
+            <div class="field-type">HTML</div>
+          </div>
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box" style="background:var(--surface2)"></div>
+            <div>
+              <div class="field-name" style="color:var(--text3)">库存数量</div>
+              <div style="font-size:10px;color:var(--text3)">variant.inventory_quantity</div>
+            </div>
+            <div class="field-type">Number</div>
+          </div>
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box" style="background:var(--surface2)"></div>
+            <div>
+              <div class="field-name" style="color:var(--text3)">用户评分</div>
+              <div style="font-size:10px;color:var(--text3)">metafield.reviews.rating</div>
+            </div>
+            <div class="field-type">Float</div>
+          </div>
+          <div class="field-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+            <div class="check-box" style="background:var(--surface2)"></div>
+            <div>
+              <div class="field-name" style="color:var(--text3)">商品标签</div>
+              <div style="font-size:10px;color:var(--text3)">product.tags</div>
+            </div>
+            <div class="field-type">String[]</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: DASHBOARD ══ -->
+    <div class="page" id="page-dashboard">
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">本月采集总量</div>
+          <div class="stat-val">284,320</div>
+          <div class="stat-change">↑ 22% vs 上月</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">监控站点数</div>
+          <div class="stat-val">37</div>
+          <div class="stat-change">↑ 5 个新增</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">数据存储使用</div>
+          <div class="stat-val">12.4 GB</div>
+          <div class="stat-change neutral">限额 50 GB</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">平均响应时间</div>
+          <div class="stat-val">1.8s</div>
+          <div class="stat-change">↓ 0.3s 优化</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">近 7 天采集量趋势</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn" style="font-size:11px;padding:4px 10px;background:var(--brand-light);color:var(--brand);border-color:var(--brand)">7 天</button>
+            <button class="btn" style="font-size:11px;padding:4px 10px">30 天</button>
+          </div>
+        </div>
+        <div class="chart-area">
+          <canvas id="dashChart" height="160"></canvas>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Top 站点采集量</div></div>
+          <div class="mini-bars">
+            <div class="mini-bar-row"><div class="mini-bar-label">FashionNova</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:92%"></div></div><div class="mini-bar-val">92%</div></div>
+            <div class="mini-bar-row"><div class="mini-bar-label">Gymshark</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:78%"></div></div><div class="mini-bar-val">78%</div></div>
+            <div class="mini-bar-row"><div class="mini-bar-label">Everlane</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:61%"></div></div><div class="mini-bar-val">61%</div></div>
+            <div class="mini-bar-row"><div class="mini-bar-label">Ruggable</div><div class="mini-bar-track"><div class="mini-bar-fill green" style="width:44%"></div></div><div class="mini-bar-val">44%</div></div>
+            <div class="mini-bar-row"><div class="mini-bar-label">Allbirds</div><div class="mini-bar-track"><div class="mini-bar-fill green" style="width:30%"></div></div><div class="mini-bar-val">30%</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">导出记录</div><div class="panel-action">全部</div></div>
+          <div class="task-row"><div class="task-url" style="font-family:'DM Sans',sans-serif">gymshark_2024_all.csv</div><div class="tag done">CSV</div><div class="task-time">今天</div></div>
+          <div class="task-row"><div class="task-url" style="font-family:'DM Sans',sans-serif">fashionnova_products.json</div><div class="tag run" style="background:var(--blue-bg);color:var(--blue-text)">JSON</div><div class="task-time">昨天</div></div>
+          <div class="task-row"><div class="task-url" style="font-family:'DM Sans',sans-serif">allbirds_monitor.xlsx</div><div class="tag wait">XLSX</div><div class="task-time">3天前</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: MONITOR ══ -->
+    <div class="page" id="page-monitor">
+      <div style="display:flex;align-items:center;gap:8px;padding:2px 0">
+        <div class="tag err" style="font-size:11px">3 个价格异动</div>
+        <span style="font-size:12px;color:var(--text3)">过去 24 小时内</span>
+      </div>
+      <div class="monitor-grid">
+        <div class="monitor-card">
+          <div class="mc-header">
+            <div>
+              <div class="mc-site">Gymshark</div>
+              <div class="mc-url">gymshark.com</div>
+            </div>
+            <div class="tag err" style="font-size:10px">涨价</div>
+          </div>
+          <div class="mc-price">$68.00</div>
+          <div class="mc-change up">↑ $8.00 (+13.3%) 较昨日</div>
+          <svg class="sparkline" viewBox="0 0 120 40"><polyline points="0,32 20,28 40,30 60,22 80,18 100,10 120,8" fill="none" stroke="#EF4444" stroke-width="1.5"/></svg>
+        </div>
+        <div class="monitor-card">
+          <div class="mc-header">
+            <div>
+              <div class="mc-site">FashionNova</div>
+              <div class="mc-url">fashionnova.com</div>
+            </div>
+            <div class="tag done" style="font-size:10px">降价</div>
+          </div>
+          <div class="mc-price">$29.99</div>
+          <div class="mc-change down">↓ $5.00 (-14.3%) 较昨日</div>
+          <svg class="sparkline" viewBox="0 0 120 40"><polyline points="0,8 20,12 40,10 60,16 80,20 100,28 120,32" fill="none" stroke="#10B981" stroke-width="1.5"/></svg>
+        </div>
+        <div class="monitor-card">
+          <div class="mc-header">
+            <div>
+              <div class="mc-site">Allbirds</div>
+              <div class="mc-url">allbirds.com</div>
+            </div>
+            <div class="tag err" style="font-size:10px">缺货</div>
+          </div>
+          <div class="mc-price">$145.00</div>
+          <div class="mc-change up">↑ 库存: 0（昨日: 48）</div>
+          <svg class="sparkline" viewBox="0 0 120 40"><polyline points="0,20 20,20 40,20 60,20 80,20 100,20 120,38" fill="none" stroke="#F59E0B" stroke-width="1.5" stroke-dasharray="4 2"/></svg>
+        </div>
+        <div class="monitor-card">
+          <div class="mc-header">
+            <div>
+              <div class="mc-site">Ruggable</div>
+              <div class="mc-url">ruggable.com</div>
+            </div>
+            <div class="tag done" style="font-size:10px">稳定</div>
+          </div>
+          <div class="mc-price">$219.00</div>
+          <div class="mc-change" style="color:var(--text3)">→ 无变化（连续 3 天）</div>
+          <svg class="sparkline" viewBox="0 0 120 40"><polyline points="0,20 20,20 40,20 60,20 80,20 100,20 120,20" fill="none" stroke="#A09DB8" stroke-width="1.5"/></svg>
+        </div>
+        <div class="monitor-card">
+          <div class="mc-header">
+            <div>
+              <div class="mc-site">Everlane</div>
+              <div class="mc-url">everlane.com</div>
+            </div>
+            <div class="tag done" style="font-size:10px">稳定</div>
+          </div>
+          <div class="mc-price">$88.00</div>
+          <div class="mc-change" style="color:var(--text3)">→ 无变化（连续 1 天）</div>
+          <svg class="sparkline" viewBox="0 0 120 40"><polyline points="0,22 20,20 40,21 60,20 80,20 100,20 120,20" fill="none" stroke="#A09DB8" stroke-width="1.5"/></svg>
+        </div>
+        <div class="monitor-card" style="border:1.5px dashed var(--border2);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;min-height:120px" onclick="openModal()">
+          <div style="text-align:center">
+            <div style="font-size:22px;color:var(--text3);margin-bottom:6px">+</div>
+            <div style="font-size:12px;color:var(--text3)">添加监控站点</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: PROXY ══ -->
+    <div class="page" id="page-proxy">
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">可用代理</div>
+          <div class="stat-val">128</div>
+          <div class="stat-change">全部在线</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">平均延迟</div>
+          <div class="stat-val">84ms</div>
+          <div class="stat-change">↓ 优化 12ms</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">今日流量</div>
+          <div class="stat-val">3.8 GB</div>
+          <div class="stat-change neutral">限额 50 GB</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">地区覆盖</div>
+          <div class="stat-val">12</div>
+          <div class="stat-change neutral">个国家/地区</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">代理 IP 列表</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" style="font-size:11px;padding:4px 10px">全部地区 ▾</button>
+            <button class="btn primary" style="font-size:12px;padding:5px 12px">+ 添加代理</button>
+          </div>
+        </div>
+        <div class="tbl-head">
+          <span style="flex:1">IP 地址</span>
+          <span style="width:55px">地区</span>
+          <span style="width:55px">延迟</span>
+          <span style="width:70px">今日流量</span>
+          <span style="width:52px">状态</span>
+        </div>
+        <div class="task-row">
+          <div class="proxy-ip">104.28.14.22:8080</div>
+          <div class="proxy-country">🇺🇸 美国</div>
+          <div class="proxy-latency"><span class="latency-dot" style="background:var(--green)"></span><span style="font-size:11px">62ms</span></div>
+          <div class="proxy-speed"><span style="font-size:11px;color:var(--text2)">0.8 GB</span></div>
+          <div class="tag run">在线</div>
+        </div>
+        <div class="task-row">
+          <div class="proxy-ip">185.199.108.153:3128</div>
+          <div class="proxy-country">🇬🇧 英国</div>
+          <div class="proxy-latency"><span class="latency-dot" style="background:var(--green)"></span><span style="font-size:11px">95ms</span></div>
+          <div class="proxy-speed"><span style="font-size:11px;color:var(--text2)">1.2 GB</span></div>
+          <div class="tag run">在线</div>
+        </div>
+        <div class="task-row">
+          <div class="proxy-ip">13.251.109.243:80</div>
+          <div class="proxy-country">🇩🇪 德国</div>
+          <div class="proxy-latency"><span class="latency-dot" style="background:var(--amber)"></span><span style="font-size:11px">148ms</span></div>
+          <div class="proxy-speed"><span style="font-size:11px;color:var(--text2)">0.4 GB</span></div>
+          <div class="tag run">在线</div>
+        </div>
+        <div class="task-row">
+          <div class="proxy-ip">47.88.62.111:8888</div>
+          <div class="proxy-country">🇯🇵 日本</div>
+          <div class="proxy-latency"><span class="latency-dot" style="background:var(--red)"></span><span style="font-size:11px">320ms</span></div>
+          <div class="proxy-speed"><span style="font-size:11px;color:var(--text2)">0.1 GB</span></div>
+          <div class="tag err">慢速</div>
+        </div>
+        <div class="task-row">
+          <div class="proxy-ip">203.30.188.11:9999</div>
+          <div class="proxy-country">🇦🇺 澳洲</div>
+          <div class="proxy-latency"><span class="latency-dot" style="background:var(--green)"></span><span style="font-size:11px">78ms</span></div>
+          <div class="proxy-speed"><span style="font-size:11px;color:var(--text2)">0.3 GB</span></div>
+          <div class="tag run">在线</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ NEW TASK MODAL ══ -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">新建采集任务</div>
+      <div class="modal-close" onclick="closeModal()">×</div>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">目标 URL</label>
+        <input class="form-input" type="text" placeholder="https://example.myshopify.com/collections/all" id="taskUrl">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">采集模式</label>
+          <select class="form-select">
+            <option>全量采集</option>
+            <option>增量更新</option>
+            <option>仅价格变动</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">代理区域</label>
+          <select class="form-select">
+            <option>自动选择</option>
+            <option>美国</option>
+            <option>英国</option>
+            <option>德国</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">采集字段</label>
+        <div class="check-group" id="fieldChecks">
+          <div class="check-item on" onclick="toggleCheck(this)">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            商品标题
+          </div>
+          <div class="check-item on" onclick="toggleCheck(this)">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            售价 / 原价
+          </div>
+          <div class="check-item on" onclick="toggleCheck(this)">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            SKU / 变体
+          </div>
+          <div class="check-item on" onclick="toggleCheck(this)">
+            <div class="check-box on"><svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            主图 / 图片组
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            库存数量
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            用户评分
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">并发数</label>
+          <select class="form-select">
+            <option>3（推荐）</option>
+            <option>5</option>
+            <option>10</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">请求延迟</label>
+          <select class="form-select">
+            <option>1–3 秒（随机）</option>
+            <option>0.5 秒</option>
+            <option>5 秒</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn primary" onclick="submitTask()">立即开始采集</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const pageConfig = {
+  tasks:     { title: '任务中心',   sub: '管理与追踪所有采集任务' },
+  schedule:  { title: '调度计划',   sub: '配置定时与周期性采集任务' },
+  fields:    { title: '字段配置',   sub: '自定义采集数据字段' },
+  dashboard: { title: '数据看板',   sub: '采集量与数据概览' },
+  monitor:   { title: '价格监控',   sub: '实时监控竞品价格与库存变动' },
+  proxy:     { title: '代理管理',   sub: '管理 IP 代理池与流量使用' },
+};
+
+function switchPage(key, el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + key).classList.add('active');
+  document.getElementById('topTitle').textContent = pageConfig[key].title;
+  document.getElementById('topSub').textContent = pageConfig[key].sub;
+}
+
+function openModal() {
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function closeModalOutside(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+function submitTask() {
+  const url = document.getElementById('taskUrl').value.trim();
+  if (!url) { alert('请填写目标 URL'); return; }
+  closeModal();
+  alert('任务已创建，正在排队启动...');
+}
+
+function toggleCheck(el) {
+  const isOn = el.classList.contains('on');
+  const box = el.querySelector('.check-box');
+  if (isOn) {
+    el.classList.remove('on');
+    box.classList.remove('on');
+    box.innerHTML = '';
+  } else {
+    el.classList.add('on');
+    box.classList.add('on');
+    box.innerHTML = '<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2 3.5-3.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+}
+
+// Draw dashboard chart
+window.addEventListener('load', () => {
+  const ctx = document.getElementById('dashChart');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['4/22','4/23','4/24','4/25','4/26','4/27','4/28'],
+      datasets: [{
+        label: '采集商品数',
+        data: [8200, 9500, 7800, 11200, 10400, 13100, 12480],
+        borderColor: '#5B47E0',
+        backgroundColor: 'rgba(91,71,224,0.07)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointBackgroundColor: '#5B47E0',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1A1824',
+          titleColor: '#A09DB8',
+          bodyColor: '#fff',
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: ctx => ' ' + ctx.parsed.y.toLocaleString() + ' 件'
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: 'DM Sans', size: 11 }, color: '#A09DB8' }
+        },
+        y: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: {
+            font: { family: 'DM Sans', size: 11 },
+            color: '#A09DB8',
+            callback: v => (v/1000).toFixed(0) + 'k'
+          }
+        }
+      }
+    }
+  });
+});
+</script>
+</body>
+</html>

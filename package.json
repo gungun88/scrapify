@@ -1,0 +1,43 @@
+{
+  "name": "scrapify",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "clean:next": "node scripts/clean-next.mjs",
+    "dev": "next dev",
+    "dev:reset": "npm run clean:next && next dev",
+    "backend:build": "tsc -p backend/tsconfig.json",
+    "backend:dev": "npm run backend:build && node backend/dist/server.js",
+    "backend:start": "npm run backend:build && node backend/dist/server.js",
+    "backend:check": "tsc -p backend/tsconfig.json --noEmit",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@tanstack/react-query": "^5.76.2",
+    "@tanstack/react-table": "^8.21.3",
+    "clsx": "^2.1.1",
+    "fastify": "^5.8.5",
+    "lucide-react": "^0.511.0",
+    "next": "^14.2.28",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^3.3.0",
+    "tsx": "^4.21.0",
+    "zustand": "^5.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.7",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.28",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
+  }
+}

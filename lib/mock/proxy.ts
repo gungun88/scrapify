@@ -1,0 +1,12 @@
+import type { ProxyItem } from '@/lib/types'
+
+export const proxyItems: ProxyItem[] = [
+  { id: 'proxy-1', ip: '23.91.214.16', port: 8000, country: 'United States', flag: 'US', latency: 182, traffic: '2.4 GB', status: 'online' },
+  { id: 'proxy-2', ip: '51.79.144.80', port: 3128, country: 'Canada', flag: 'CA', latency: 236, traffic: '1.2 GB', status: 'online' },
+  { id: 'proxy-3', ip: '92.204.163.55', port: 8080, country: 'Germany', flag: 'DE', latency: 421, traffic: '0.8 GB', status: 'slow' },
+  { id: 'proxy-4', ip: '139.162.78.44', port: 9001, country: 'Japan', flag: 'JP', latency: 512, traffic: '0.5 GB', status: 'slow' },
+  { id: 'proxy-5', ip: '185.198.59.16', port: 8080, country: 'United Kingdom', flag: 'GB', latency: 167, traffic: '3.1 GB', status: 'online' },
+  { id: 'proxy-6', ip: '103.163.220.11', port: 1080, country: 'Singapore', flag: 'SG', latency: 0, traffic: '0 GB', status: 'offline' },
+  { id: 'proxy-7', ip: '45.76.148.62', port: 8118, country: 'Australia', flag: 'AU', latency: 284, traffic: '0.9 GB', status: 'online' },
+  { id: 'proxy-8', ip: '146.190.88.92', port: 8000, country: 'Netherlands', flag: 'NL', latency: 0, traffic: '0.1 GB', status: 'offline' },
+]

@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'DM Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'DM Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --brand: #5b47e0;
+  --brand-light: #ede9fc;
+  --brand-mid: #7c6ae8;
+  --bg: #f5f4f8;
+  --surface: #ffffff;
+  --surface2: #f8f7fb;
+  --border: rgba(0, 0, 0, 0.08);
+  --border2: rgba(0, 0, 0, 0.14);
+  --text: #1a1824;
+  --text2: #6b6880;
+  --text3: #a09db8;
+  --green: #10b981;
+  --green-bg: #ecfdf5;
+  --green-text: #059669;
+  --red: #ef4444;
+  --red-bg: #fef2f2;
+  --red-text: #dc2626;
+  --amber: #f59e0b;
+  --amber-bg: #fffbeb;
+  --amber-text: #d97706;
+  --blue: #3b82f6;
+  --blue-bg: #eff6ff;
+  --blue-text: #2563eb;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --sidebar-w: 210px;
+  --topbar-h: 54px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 999px;
+}
+
+.surface-ring {
+  border: 1px solid var(--border);
+}
