@@ -1,7 +1,5 @@
-import { NextResponse } from 'next/server'
-import { patchTask } from '@/lib/mock/taskRuntime'
-import { proxyBackendRequest } from '@/lib/server/backend'
-import type { Task } from '@/lib/types'
+import { getBackendUnavailableResponse, proxyBackendRequest } from '@/lib/server/backend'
+import type { TaskDetail } from '@/lib/types'
 
 interface RouteContext {
   params: {
@@ -9,8 +7,21 @@ interface RouteContext {
   }
 }
 
+export async function GET(request: Request, { params }: RouteContext) {
+  const proxied = await proxyBackendRequest({
+    path: `/tasks/${params.id}`,
+    search: new URL(request.url).search,
+  })
+
+  if (proxied) {
+    return proxied
+  }
+
+  return getBackendUnavailableResponse()
+}
+
 export async function PATCH(request: Request, { params }: RouteContext) {
-  const body = (await request.json()) as Partial<Task>
+  const body = (await request.json()) as Partial<TaskDetail>
 
   const proxied = await proxyBackendRequest({
     path: `/tasks/${params.id}`,
@@ -22,11 +33,5 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return proxied
   }
 
-  const task = patchTask(params.id, body)
-
-  if (!task) {
-    return NextResponse.json({ message: 'Task not found' }, { status: 404 })
-  }
-
-  return NextResponse.json(task)
+  return getBackendUnavailableResponse()
 }

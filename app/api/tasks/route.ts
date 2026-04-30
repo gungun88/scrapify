@@ -1,6 +1,4 @@
-import { NextResponse } from 'next/server'
-import { createTask, listTasks } from '@/lib/mock/taskRuntime'
-import { proxyBackendRequest } from '@/lib/server/backend'
+import { getBackendUnavailableResponse, proxyBackendRequest } from '@/lib/server/backend'
 import type { NewTaskForm } from '@/lib/types'
 
 export async function GET(request: Request) {
@@ -13,7 +11,7 @@ export async function GET(request: Request) {
     return proxied
   }
 
-  return NextResponse.json(listTasks())
+  return getBackendUnavailableResponse()
 }
 
 export async function POST(request: Request) {
@@ -29,7 +27,5 @@ export async function POST(request: Request) {
     return proxied
   }
 
-  const task = createTask(body)
-
-  return NextResponse.json(task, { status: 201 })
+  return getBackendUnavailableResponse()
 }

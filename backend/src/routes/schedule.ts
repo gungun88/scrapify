@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDatabase, saveDatabase } from '../services/data-store'
+import { refreshScheduleJob } from '../services/schedule-runtime'
 import type { ScheduleJob } from '../types'
 
 export async function registerScheduleRoutes(app: FastifyInstance) {
@@ -19,6 +20,11 @@ export async function registerScheduleRoutes(app: FastifyInstance) {
       }
 
       Object.assign(job, request.body)
+
+      if (typeof request.body?.enabled === 'boolean' || typeof request.body?.cron === 'string' || request.body?.taskTemplate) {
+        refreshScheduleJob(job)
+      }
+
       await saveDatabase()
 
       return reply.send(job)

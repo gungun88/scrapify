@@ -13,10 +13,13 @@ import {
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { Task } from '@/lib/types'
+import { cn } from '@/lib/utils'
+import type { Task } from '@/lib/types'
 
 interface TaskTableProps {
   tasks: Task[]
+  selectedTaskId?: string | null
+  onSelectTask?: (task: Task) => void
 }
 
 const columns: ColumnDef<Task>[] = [
@@ -49,7 +52,7 @@ const columns: ColumnDef<Task>[] = [
     header: '商品数',
     cell: ({ row }) => (
       <div className="w-[52px] text-center text-text2">
-        {row.original.status === 'pending' ? '—' : row.original.itemCount.toLocaleString('en-US')}
+        {row.original.status === 'pending' ? '--' : row.original.itemCount.toLocaleString('en-US')}
       </div>
     ),
   },
@@ -60,7 +63,7 @@ const columns: ColumnDef<Task>[] = [
   },
 ]
 
-export function TaskTable({ tasks }: TaskTableProps) {
+export function TaskTable({ tasks, selectedTaskId, onSelectTask }: TaskTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'itemCount', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
@@ -90,9 +93,9 @@ export function TaskTable({ tasks }: TaskTableProps) {
         >
           <option value="all">全部状态</option>
           <option value="running">运行中</option>
-          <option value="done">完成</option>
+          <option value="done">已完成</option>
           <option value="pending">等待中</option>
-          <option value="error">报错</option>
+          <option value="error">失败</option>
         </select>
 
         <button
@@ -100,7 +103,7 @@ export function TaskTable({ tasks }: TaskTableProps) {
           onClick={() => table.getColumn('itemCount')?.toggleSorting(table.getState().sorting[0]?.desc ?? false)}
           className="rounded-sm border border-border2 bg-surface px-[10px] py-1 text-[11px] text-text2 transition-colors hover:bg-surface2 hover:text-text1"
         >
-          商品数排序
+          按商品数排序
         </button>
       </div>
 
@@ -129,7 +132,19 @@ export function TaskTable({ tasks }: TaskTableProps) {
         table.getRowModel().rows.map((row) => (
           <div
             key={row.id}
-            className="flex items-center gap-[10px] border-b border-border px-4 py-[10px] text-xs transition-colors hover:bg-surface2"
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelectTask?.(row.original)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onSelectTask?.(row.original)
+              }
+            }}
+            className={cn(
+              'flex items-center gap-[10px] border-b border-border px-4 py-[10px] text-xs transition-colors hover:bg-surface2 focus:bg-surface2 focus:outline-none',
+              selectedTaskId === row.original.id && 'bg-surface2',
+            )}
           >
             {row.getVisibleCells().map((cell) => (
               <div
@@ -152,7 +167,7 @@ export function TaskTable({ tasks }: TaskTableProps) {
           </div>
         ))
       ) : (
-        <div className="px-5 py-10 text-center text-sm text-text3">当前筛选条件下没有任务</div>
+        <div className="px-5 py-10 text-center text-sm text-text3">当前筛选条件下暂无任务</div>
       )}
     </div>
   )

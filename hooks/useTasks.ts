@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { usePolling } from '@/hooks/usePolling'
 import type { Task } from '@/lib/types'
+import { readErrorMessage } from '@/lib/utils'
 
 export function useTasks() {
   const refetchInterval = usePolling(true, 3000)
@@ -13,7 +14,7 @@ export function useTasks() {
       const response = await fetch('/api/tasks')
 
       if (!response.ok) {
-        throw new Error('Failed to fetch tasks')
+        throw new Error(await readErrorMessage(response))
       }
 
       return response.json()

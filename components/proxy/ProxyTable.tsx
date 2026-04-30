@@ -5,6 +5,26 @@ interface ProxyTableProps {
   items: ProxyItem[]
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return '--'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 function getProxyTone(status: ProxyItem['status']) {
   if (status === 'online') {
     return {
@@ -16,7 +36,7 @@ function getProxyTone(status: ProxyItem['status']) {
 
   if (status === 'slow') {
     return {
-      label: '延迟高',
+      label: '高延迟',
       dotClassName: 'bg-amber',
       badgeClassName: 'bg-amber-bg text-amber-text',
     }
@@ -39,6 +59,9 @@ export function ProxyTable({ items }: ProxyTableProps) {
             <th className="px-4 py-3 font-semibold">地区</th>
             <th className="px-4 py-3 font-semibold">延迟</th>
             <th className="px-4 py-3 font-semibold">流量</th>
+            <th className="px-4 py-3 font-semibold">最近检查</th>
+            <th className="px-4 py-3 font-semibold">最近心跳</th>
+            <th className="px-4 py-3 font-semibold">连续失败</th>
             <th className="px-4 py-3 font-semibold">状态</th>
           </tr>
         </thead>
@@ -57,10 +80,27 @@ export function ProxyTable({ items }: ProxyTableProps) {
                   <div className="font-medium text-text1">{item.flag}</div>
                   <div className="text-xs text-text3">{item.country}</div>
                 </td>
-                <td className="px-4 py-3 text-text1">{item.latency ? `${item.latency} ms` : '—'}</td>
+                <td className="px-4 py-3 text-text1">{item.latency > 0 ? `${item.latency} ms` : '--'}</td>
                 <td className="px-4 py-3 text-text1">{item.traffic}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-text1">{formatDateTime(item.lastCheckedAt)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-text1">{formatDateTime(item.lastHeartbeatAt)}</td>
                 <td className="px-4 py-3">
-                  <span className={cn('inline-flex items-center gap-2 rounded-full px-[9px] py-[4px] text-[11px] font-semibold', tone.badgeClassName)}>
+                  <span
+                    className={cn(
+                      'inline-flex min-w-[52px] justify-center rounded-full px-[9px] py-[4px] text-[11px] font-semibold',
+                      item.consecutiveFailures > 0 ? 'bg-red-bg text-red-text' : 'bg-surface2 text-text3',
+                    )}
+                  >
+                    {item.consecutiveFailures}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-full px-[9px] py-[4px] text-[11px] font-semibold',
+                      tone.badgeClassName,
+                    )}
+                  >
                     <span className={cn('h-2 w-2 rounded-full', tone.dotClassName)} />
                     {tone.label}
                   </span>

@@ -31,7 +31,7 @@ export const taskModalFields = [
   { id: 'title', label: '商品标题', defaultChecked: true },
   { id: 'price', label: '售价 / 原价', defaultChecked: true },
   { id: 'sku', label: 'SKU / 变体', defaultChecked: true },
-  { id: 'images', label: '主图 / 图片组', defaultChecked: true },
+  { id: 'images', label: '主图 / 图片集', defaultChecked: true },
   { id: 'inventory', label: '库存数量', defaultChecked: false },
   { id: 'rating', label: '用户评分', defaultChecked: false },
 ]

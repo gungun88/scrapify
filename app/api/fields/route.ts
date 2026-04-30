@@ -1,6 +1,4 @@
-import { NextResponse } from 'next/server'
-import { listFieldConfigs, updateFieldConfigs } from '@/lib/mock/fields'
-import { proxyBackendRequest } from '@/lib/server/backend'
+import { getBackendUnavailableResponse, proxyBackendRequest } from '@/lib/server/backend'
 import type { FieldConfig } from '@/lib/types'
 
 export async function GET(request: Request) {
@@ -13,7 +11,7 @@ export async function GET(request: Request) {
     return proxied
   }
 
-  return NextResponse.json(listFieldConfigs())
+  return getBackendUnavailableResponse()
 }
 
 export async function PUT(request: Request) {
@@ -29,5 +27,5 @@ export async function PUT(request: Request) {
     return proxied
   }
 
-  return NextResponse.json(updateFieldConfigs(body))
+  return getBackendUnavailableResponse()
 }

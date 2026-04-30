@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { AnalyticsSnapshot } from '@/lib/types'
+import { readErrorMessage } from '@/lib/utils'
 
 export function useAnalytics() {
   return useQuery<AnalyticsSnapshot>({
@@ -10,7 +11,7 @@ export function useAnalytics() {
       const response = await fetch('/api/analytics')
 
       if (!response.ok) {
-        throw new Error('Failed to fetch analytics')
+        throw new Error(await readErrorMessage(response))
       }
 
       return response.json()

@@ -1,0 +1,824 @@
+{
+  "tasks": [
+    {
+      "id": "task-890c51bc",
+      "url": "gymshark.com/collections/all",
+      "status": "pending",
+      "progress": 0,
+      "itemCount": 0,
+      "elapsed": "0s",
+      "createdAt": "2026-04-28T19:33:59.298Z",
+      "mode": "price-only",
+      "region": "us",
+      "fields": [
+        "title",
+        "price",
+        "sku"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 835,
+      "startedAt": null,
+      "finishedAt": null,
+      "errorMessage": null,
+      "workerId": null,
+      "lastHeartbeatAt": null,
+      "startedAtMs": 1777404839298,
+      "updatedAtMs": 1777404839298,
+      "logs": [
+        {
+          "id": "log-23fd59d6",
+          "at": "2026-04-28T19:33:59.298Z",
+          "level": "info",
+          "message": "Task queued."
+        },
+        {
+          "id": "log-5832a8cd",
+          "at": "2026-04-28T19:33:59.298Z",
+          "level": "info",
+          "message": "Scheduled by 价格巡检."
+        }
+      ]
+    },
+    {
+      "id": "task-1",
+      "url": "gymshark.com/collections/all",
+      "status": "running",
+      "progress": 72,
+      "itemCount": 1243,
+      "elapsed": "4m12s",
+      "createdAt": "2026-04-28T19:29:47.293Z",
+      "mode": "full",
+      "region": "auto",
+      "fields": [
+        "title",
+        "price",
+        "sku",
+        "images"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 1720,
+      "startedAt": "2026-04-28T19:29:47.293Z",
+      "finishedAt": null,
+      "errorMessage": null,
+      "workerId": "local-worker-1",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.293Z",
+      "startedAtMs": 1777404587293,
+      "updatedAtMs": 1777404839293,
+      "logs": [
+        {
+          "id": "log-731956a3",
+          "at": "2026-04-28T19:29:47.293Z",
+          "level": "info",
+          "message": "Task queued."
+        },
+        {
+          "id": "log-c8b81ee4",
+          "at": "2026-04-28T19:29:47.293Z",
+          "level": "info",
+          "message": "Worker claimed task."
+        }
+      ]
+    },
+    {
+      "id": "task-2",
+      "url": "fashionnova.com/collections/dresses",
+      "status": "done",
+      "progress": 100,
+      "itemCount": 3892,
+      "elapsed": "12m00s",
+      "createdAt": "2026-04-28T19:21:59.294Z",
+      "mode": "full",
+      "region": "auto",
+      "fields": [
+        "title",
+        "price",
+        "sku",
+        "images"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 3892,
+      "startedAt": "2026-04-28T19:21:59.294Z",
+      "finishedAt": "2026-04-28T19:33:59.294Z",
+      "errorMessage": null,
+      "workerId": null,
+      "lastHeartbeatAt": "2026-04-28T19:33:59.294Z",
+      "startedAtMs": 1777404119294,
+      "updatedAtMs": 1777404839294,
+      "logs": [
+        {
+          "id": "log-030bc928",
+          "at": "2026-04-28T19:21:59.294Z",
+          "level": "info",
+          "message": "Task queued."
+        },
+        {
+          "id": "log-772f922c",
+          "at": "2026-04-28T19:21:59.294Z",
+          "level": "info",
+          "message": "Worker claimed task."
+        },
+        {
+          "id": "log-aae738ef",
+          "at": "2026-04-28T19:33:59.294Z",
+          "level": "info",
+          "message": "Task completed."
+        }
+      ]
+    },
+    {
+      "id": "task-3",
+      "url": "allbirds.com/pages/all-products",
+      "status": "pending",
+      "progress": 0,
+      "itemCount": 0,
+      "elapsed": "0s",
+      "createdAt": "2026-04-28T19:33:59.294Z",
+      "mode": "full",
+      "region": "auto",
+      "fields": [
+        "title",
+        "price",
+        "sku",
+        "images"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 980,
+      "startedAt": null,
+      "finishedAt": null,
+      "errorMessage": null,
+      "workerId": null,
+      "lastHeartbeatAt": null,
+      "startedAtMs": 1777404839294,
+      "updatedAtMs": 1777404839294,
+      "logs": [
+        {
+          "id": "log-52ac88ef",
+          "at": "2026-04-28T19:33:59.294Z",
+          "level": "info",
+          "message": "Task queued."
+        }
+      ]
+    },
+    {
+      "id": "task-4",
+      "url": "bombas.com/collections/mens-socks",
+      "status": "error",
+      "progress": 38,
+      "itemCount": 519,
+      "elapsed": "2m31s",
+      "createdAt": "2026-04-28T19:31:28.294Z",
+      "mode": "full",
+      "region": "auto",
+      "fields": [
+        "title",
+        "price",
+        "sku",
+        "images"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 1360,
+      "startedAt": "2026-04-28T19:31:28.294Z",
+      "finishedAt": "2026-04-28T19:33:59.294Z",
+      "errorMessage": "Task failed during execution.",
+      "workerId": null,
+      "lastHeartbeatAt": "2026-04-28T19:33:59.294Z",
+      "startedAtMs": 1777404688294,
+      "updatedAtMs": 1777404839294,
+      "logs": [
+        {
+          "id": "log-e4be9fdd",
+          "at": "2026-04-28T19:31:28.294Z",
+          "level": "info",
+          "message": "Task queued."
+        },
+        {
+          "id": "log-61742708",
+          "at": "2026-04-28T19:31:28.294Z",
+          "level": "info",
+          "message": "Worker claimed task."
+        },
+        {
+          "id": "log-dc3e38c2",
+          "at": "2026-04-28T19:33:59.294Z",
+          "level": "error",
+          "message": "Task failed during execution."
+        }
+      ]
+    },
+    {
+      "id": "task-5",
+      "url": "ruggable.com/products",
+      "status": "running",
+      "progress": 55,
+      "itemCount": 876,
+      "elapsed": "3m05s",
+      "createdAt": "2026-04-28T19:30:54.294Z",
+      "mode": "full",
+      "region": "auto",
+      "fields": [
+        "title",
+        "price",
+        "sku",
+        "images"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 1590,
+      "startedAt": "2026-04-28T19:30:54.294Z",
+      "finishedAt": null,
+      "errorMessage": null,
+      "workerId": "local-worker-1",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.294Z",
+      "startedAtMs": 1777404654294,
+      "updatedAtMs": 1777404839294,
+      "logs": [
+        {
+          "id": "log-a428d7d8",
+          "at": "2026-04-28T19:30:54.294Z",
+          "level": "info",
+          "message": "Task queued."
+        },
+        {
+          "id": "log-cad81aef",
+          "at": "2026-04-28T19:30:54.294Z",
+          "level": "info",
+          "message": "Worker claimed task."
+        }
+      ]
+    },
+    {
+      "id": "task-6",
+      "url": "everlane.com/collections/new-arrivals",
+      "status": "done",
+      "progress": 100,
+      "itemCount": 2104,
+      "elapsed": "8m40s",
+      "createdAt": "2026-04-28T19:25:19.294Z",
+      "mode": "full",
+      "region": "auto",
+      "fields": [
+        "title",
+        "price",
+        "sku",
+        "images"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 2104,
+      "startedAt": "2026-04-28T19:25:19.294Z",
+      "finishedAt": "2026-04-28T19:33:59.294Z",
+      "errorMessage": null,
+      "workerId": null,
+      "lastHeartbeatAt": "2026-04-28T19:33:59.294Z",
+      "startedAtMs": 1777404319294,
+      "updatedAtMs": 1777404839294,
+      "logs": [
+        {
+          "id": "log-c6034fc1",
+          "at": "2026-04-28T19:25:19.294Z",
+          "level": "info",
+          "message": "Task queued."
+        },
+        {
+          "id": "log-d7db16f0",
+          "at": "2026-04-28T19:25:19.294Z",
+          "level": "info",
+          "message": "Worker claimed task."
+        },
+        {
+          "id": "log-869ba82c",
+          "at": "2026-04-28T19:33:59.294Z",
+          "level": "info",
+          "message": "Task completed."
+        }
+      ]
+    },
+    {
+      "id": "task-7",
+      "url": "cettire.com/collections/womens",
+      "status": "running",
+      "progress": 30,
+      "itemCount": 441,
+      "elapsed": "1m52s",
+      "createdAt": "2026-04-28T19:32:07.294Z",
+      "mode": "full",
+      "region": "auto",
+      "fields": [
+        "title",
+        "price",
+        "sku",
+        "images"
+      ],
+      "concurrency": 3,
+      "delay": "1-3s",
+      "targetCount": 1460,
+      "startedAt": "2026-04-28T19:32:07.294Z",
+      "finishedAt": null,
+      "errorMessage": null,
+      "workerId": "local-worker-1",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.294Z",
+      "startedAtMs": 1777404727294,
+      "updatedAtMs": 1777404839294,
+      "logs": [
+        {
+          "id": "log-b08969aa",
+          "at": "2026-04-28T19:32:07.294Z",
+          "level": "info",
+          "message": "Task queued."
+        },
+        {
+          "id": "log-0b782b7d",
+          "at": "2026-04-28T19:32:07.294Z",
+          "level": "info",
+          "message": "Worker claimed task."
+        }
+      ]
+    }
+  ],
+  "fieldConfigs": [
+    {
+      "id": "title",
+      "label": "商品标题",
+      "path": "product.title",
+      "type": "String",
+      "enabled": true
+    },
+    {
+      "id": "sku",
+      "label": "SKU / 变体",
+      "path": "product.variants",
+      "type": "Array",
+      "enabled": true
+    },
+    {
+      "id": "price",
+      "label": "售价 / 原价",
+      "path": "product.price",
+      "type": "Number",
+      "enabled": true
+    },
+    {
+      "id": "images",
+      "label": "主图 / 图片集",
+      "path": "product.images",
+      "type": "URL[]",
+      "enabled": true
+    },
+    {
+      "id": "inventory",
+      "label": "库存数量",
+      "path": "product.inventory",
+      "type": "Number",
+      "enabled": false
+    },
+    {
+      "id": "rating",
+      "label": "用户评分 / 评论数",
+      "path": "product.rating",
+      "type": "Float",
+      "enabled": false
+    },
+    {
+      "id": "tags",
+      "label": "商品标签 / 分类",
+      "path": "product.tags",
+      "type": "String[]",
+      "enabled": false
+    },
+    {
+      "id": "vendor",
+      "label": "品牌 / 供应商",
+      "path": "product.vendor",
+      "type": "String",
+      "enabled": true
+    }
+  ],
+  "scheduleJobs": [
+    {
+      "id": "schedule-1",
+      "name": "价格巡检",
+      "cron": "0 */4 * * *",
+      "cronLabel": "每 4 小时",
+      "lastRun": "今天 03:33",
+      "nextRun": "今天 04:00",
+      "enabled": true,
+      "taskTemplate": {
+        "url": "gymshark.com/collections/all",
+        "mode": "price-only",
+        "region": "us",
+        "fields": [
+          "title",
+          "price",
+          "sku"
+        ],
+        "concurrency": 3,
+        "delay": "1-3s"
+      },
+      "lastRunAt": "2026-04-28T19:33:59.298Z",
+      "nextRunAt": "2026-04-28T20:00:00.000Z"
+    },
+    {
+      "id": "schedule-2",
+      "name": "新品站点全量采集",
+      "cron": "30 2 * * *",
+      "cronLabel": "每天 02:30",
+      "lastRun": "今天 02:30",
+      "nextRun": "明天 02:30",
+      "enabled": true,
+      "taskTemplate": {
+        "url": "fashionnova.com/collections/new",
+        "mode": "full",
+        "region": "us",
+        "fields": [
+          "title",
+          "price",
+          "sku",
+          "images",
+          "vendor"
+        ],
+        "concurrency": 5,
+        "delay": "1-3s"
+      },
+      "lastRunAt": "2026-04-28T18:30:00.000Z",
+      "nextRunAt": "2026-04-29T18:30:00.000Z"
+    },
+    {
+      "id": "schedule-3",
+      "name": "库存波动复查",
+      "cron": "0 */6 * * *",
+      "cronLabel": "每 6 小时",
+      "lastRun": "今天 09:00",
+      "nextRun": "已暂停",
+      "enabled": false,
+      "taskTemplate": {
+        "url": "ruggable.com/products",
+        "mode": "incremental",
+        "region": "us",
+        "fields": [
+          "title",
+          "price",
+          "inventory"
+        ],
+        "concurrency": 3,
+        "delay": "5s"
+      },
+      "lastRunAt": "2026-04-29T01:00:00.000Z",
+      "nextRunAt": null
+    },
+    {
+      "id": "schedule-4",
+      "name": "高价品牌补采",
+      "cron": "15 8,20 * * *",
+      "cronLabel": "每天 08:15 / 20:15",
+      "lastRun": "昨天 20:15",
+      "nextRun": "今天 20:15",
+      "enabled": true,
+      "taskTemplate": {
+        "url": "cettire.com/collections/womens",
+        "mode": "incremental",
+        "region": "uk",
+        "fields": [
+          "title",
+          "price",
+          "images",
+          "vendor"
+        ],
+        "concurrency": 5,
+        "delay": "0.5s"
+      },
+      "lastRunAt": "2026-04-28T12:15:00.000Z",
+      "nextRunAt": "2026-04-29T12:15:00.000Z"
+    }
+  ],
+  "monitorItems": [
+    {
+      "id": "monitor-1",
+      "site": "Gymshark",
+      "url": "gymshark.com/products/adapt-seamless-leggings",
+      "price": 57,
+      "currency": "$",
+      "change": -1.7,
+      "status": "down",
+      "history": [
+        49,
+        52,
+        52,
+        54,
+        55,
+        58,
+        57
+      ],
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z"
+    },
+    {
+      "id": "monitor-2",
+      "site": "Allbirds",
+      "url": "allbirds.com/products/tree-runner-go",
+      "price": 98,
+      "currency": "$",
+      "change": 4.3,
+      "status": "up",
+      "history": [
+        99,
+        98,
+        97,
+        97,
+        96,
+        94,
+        98
+      ],
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z"
+    },
+    {
+      "id": "monitor-3",
+      "site": "Bombas",
+      "url": "bombas.com/products/mens-merino-calf-sock-4-pack",
+      "price": 62,
+      "currency": "$",
+      "change": -3.1,
+      "status": "down",
+      "history": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        62
+      ],
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z"
+    },
+    {
+      "id": "monitor-4",
+      "site": "Ruggable",
+      "url": "ruggable.com/products/kamran-rug",
+      "price": 226,
+      "currency": "$",
+      "change": 3.2,
+      "status": "up",
+      "history": [
+        239,
+        239,
+        229,
+        229,
+        219,
+        219,
+        226
+      ],
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z"
+    },
+    {
+      "id": "monitor-5",
+      "site": "Everlane",
+      "url": "everlane.com/products/womens-organic-cotton-box-cut-tee",
+      "price": 25,
+      "currency": "$",
+      "change": -3.8,
+      "status": "down",
+      "history": [
+        24,
+        24,
+        25,
+        25,
+        26,
+        26,
+        25
+      ],
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z"
+    },
+    {
+      "id": "monitor-6",
+      "site": "Cettire",
+      "url": "cettire.com/products/saint-laurent-logo-bag",
+      "price": 1915,
+      "currency": "$",
+      "change": 0,
+      "status": "stable",
+      "history": [
+        1995,
+        1995,
+        1995,
+        0,
+        0,
+        0,
+        1915
+      ],
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z"
+    }
+  ],
+  "proxyItems": [
+    {
+      "id": "proxy-1",
+      "ip": "23.91.214.16",
+      "port": 8000,
+      "country": "United States",
+      "flag": "US",
+      "latency": 156,
+      "traffic": "2.8 GB",
+      "status": "online",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.297Z",
+      "consecutiveFailures": 0
+    },
+    {
+      "id": "proxy-2",
+      "ip": "51.79.144.80",
+      "port": 3128,
+      "country": "Canada",
+      "flag": "CA",
+      "latency": 226,
+      "traffic": "1.3 GB",
+      "status": "online",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.297Z",
+      "consecutiveFailures": 0
+    },
+    {
+      "id": "proxy-3",
+      "ip": "92.204.163.55",
+      "port": 8080,
+      "country": "Germany",
+      "flag": "DE",
+      "latency": 366,
+      "traffic": "1.2 GB",
+      "status": "online",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.297Z",
+      "consecutiveFailures": 0
+    },
+    {
+      "id": "proxy-4",
+      "ip": "139.162.78.44",
+      "port": 9001,
+      "country": "Japan",
+      "flag": "JP",
+      "latency": 380,
+      "traffic": "0.9 GB",
+      "status": "online",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.297Z",
+      "consecutiveFailures": 0
+    },
+    {
+      "id": "proxy-5",
+      "ip": "185.198.59.16",
+      "port": 8080,
+      "country": "United Kingdom",
+      "flag": "GB",
+      "latency": 103,
+      "traffic": "3.4 GB",
+      "status": "online",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.297Z",
+      "consecutiveFailures": 0
+    },
+    {
+      "id": "proxy-6",
+      "ip": "103.163.220.11",
+      "port": 1080,
+      "country": "Singapore",
+      "flag": "SG",
+      "latency": 0,
+      "traffic": "0 GB",
+      "status": "offline",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": null,
+      "consecutiveFailures": 5
+    },
+    {
+      "id": "proxy-7",
+      "ip": "45.76.148.62",
+      "port": 8118,
+      "country": "Australia",
+      "flag": "AU",
+      "latency": 332,
+      "traffic": "1.2 GB",
+      "status": "online",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": "2026-04-28T19:33:59.297Z",
+      "consecutiveFailures": 0
+    },
+    {
+      "id": "proxy-8",
+      "ip": "146.190.88.92",
+      "port": 8000,
+      "country": "Netherlands",
+      "flag": "NL",
+      "latency": 0,
+      "traffic": "0.1 GB",
+      "status": "offline",
+      "lastCheckedAt": "2026-04-28T19:33:59.297Z",
+      "lastHeartbeatAt": null,
+      "consecutiveFailures": 6
+    }
+  ],
+  "analyticsSnapshot": {
+    "stats": [
+      {
+        "label": "7 天采集商品",
+        "value": "84,290",
+        "change": "较上周 +12.4%",
+        "trend": "up"
+      },
+      {
+        "label": "活跃站点覆盖",
+        "value": "126",
+        "change": "新增 9 个 Shopify 站点",
+        "trend": "up"
+      },
+      {
+        "label": "平均采集时长",
+        "value": "6m18s",
+        "change": "较上周 -42s",
+        "trend": "down"
+      },
+      {
+        "label": "导出成功率",
+        "value": "98.6%",
+        "change": "近 30 次导出稳定",
+        "trend": "neutral"
+      }
+    ],
+    "trend": [
+      {
+        "date": "4/22",
+        "count": 8200
+      },
+      {
+        "date": "4/23",
+        "count": 9100
+      },
+      {
+        "date": "4/24",
+        "count": 10300
+      },
+      {
+        "date": "4/25",
+        "count": 9900
+      },
+      {
+        "date": "4/26",
+        "count": 11800
+      },
+      {
+        "date": "4/27",
+        "count": 13100
+      },
+      {
+        "date": "4/28",
+        "count": 15890
+      }
+    ],
+    "channels": [
+      {
+        "label": "服饰",
+        "value": 84
+      },
+      {
+        "label": "鞋包",
+        "value": 67
+      },
+      {
+        "label": "家居",
+        "value": 52,
+        "color": "green"
+      },
+      {
+        "label": "美妆",
+        "value": 41
+      },
+      {
+        "label": "运动",
+        "value": 33,
+        "color": "amber"
+      }
+    ],
+    "highlights": [
+      {
+        "label": "峰值并发",
+        "value": "10 workers",
+        "note": "由 Gymshark 和 Cettire 两个任务触发"
+      },
+      {
+        "label": "最佳来源站",
+        "value": "fashionnova.com",
+        "note": "近 7 天新增 SKU 8,420 个"
+      },
+      {
+        "label": "异常告警",
+        "value": "3 条",
+        "note": "均来自价格变化超过 12% 的监控任务"
+      },
+      {
+        "label": "平均字段完整度",
+        "value": "94.8%",
+        "note": "图片与库存字段覆盖率最高"
+      }
+    ]
+  }
+}

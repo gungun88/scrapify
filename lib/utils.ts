@@ -11,9 +11,9 @@ export function getTaskStatusLabel(status: TaskStatus) {
     case 'running':
       return '运行中'
     case 'done':
-      return '完成'
+      return '已完成'
     case 'error':
-      return '报错'
+      return '失败'
     case 'pending':
       return '等待中'
     default:
@@ -39,4 +39,15 @@ export function formatDelayLabel(value: string) {
   }
 
   return value
+}
+
+export async function readErrorMessage(response: Response) {
+  try {
+    const payload = (await response.json()) as { message?: string }
+    if (typeof payload?.message === 'string' && payload.message.trim()) {
+      return payload.message
+    }
+  } catch {}
+
+  return `Request failed with status ${response.status}`
 }

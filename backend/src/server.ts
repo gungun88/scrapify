@@ -9,6 +9,10 @@ import { registerProxyRoutes } from './routes/proxy'
 import { registerScheduleRoutes } from './routes/schedule'
 import { registerTaskRoutes } from './routes/tasks'
 import { loadDatabase } from './services/data-store'
+import { startMonitorWorker } from './services/monitor-runtime'
+import { startProxyWorker } from './services/proxy-runtime'
+import { startScheduleWorker } from './services/schedule-runtime'
+import { startTaskWorker } from './services/task-runtime'
 
 async function createServer() {
   const app = Fastify({ logger: true })
@@ -30,6 +34,10 @@ async function createServer() {
 
 async function start() {
   await loadDatabase()
+  startTaskWorker()
+  startScheduleWorker()
+  startMonitorWorker()
+  startProxyWorker()
   const app = await createServer()
 
   try {

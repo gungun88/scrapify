@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ScheduleJob } from '@/lib/types'
+import { readErrorMessage } from '@/lib/utils'
 
 export function useSchedule() {
   return useQuery<ScheduleJob[]>({
@@ -10,7 +11,7 @@ export function useSchedule() {
       const response = await fetch('/api/schedule')
 
       if (!response.ok) {
-        throw new Error('Failed to fetch schedules')
+        throw new Error(await readErrorMessage(response))
       }
 
       return response.json()
@@ -31,7 +32,7 @@ export function useUpdateScheduleJob() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update schedule')
+        throw new Error(await readErrorMessage(response))
       }
 
       return (await response.json()) as ScheduleJob

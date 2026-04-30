@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTaskStore } from '@/lib/store/taskStore'
 import type { NewTaskForm, Task } from '@/lib/types'
+import { readErrorMessage } from '@/lib/utils'
 
 function createOptimisticTask(url: string): Task {
   return {
@@ -11,7 +12,7 @@ function createOptimisticTask(url: string): Task {
     status: 'pending',
     progress: 0,
     itemCount: 0,
-    elapsed: '—',
+    elapsed: '0s',
     createdAt: new Date().toISOString(),
   }
 }
@@ -31,7 +32,7 @@ export function useCreateTask() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to create task')
+        throw new Error(await readErrorMessage(response))
       }
 
       return (await response.json()) as Task

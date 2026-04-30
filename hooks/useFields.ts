@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { FieldConfig } from '@/lib/types'
+import { readErrorMessage } from '@/lib/utils'
 
 export function useFields() {
   return useQuery<FieldConfig[]>({
@@ -10,7 +11,7 @@ export function useFields() {
       const response = await fetch('/api/fields')
 
       if (!response.ok) {
-        throw new Error('Failed to fetch field configs')
+        throw new Error(await readErrorMessage(response))
       }
 
       return response.json()
@@ -31,7 +32,7 @@ export function useUpdateFields() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update field configs')
+        throw new Error(await readErrorMessage(response))
       }
 
       return (await response.json()) as FieldConfig[]

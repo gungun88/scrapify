@@ -5,6 +5,7 @@ interface BackendOptions {
   method?: string
   body?: unknown
   search?: string
+  raw?: boolean
 }
 
 function getOptionalEnv(name: string) {
@@ -60,7 +61,7 @@ async function parseResponsePayload(response: Response) {
   return text ? { message: text } : null
 }
 
-export async function proxyBackendRequest({ path, method = 'GET', body, search }: BackendOptions) {
+export async function proxyBackendRequest({ path, method = 'GET', body, search, raw = false }: BackendOptions) {
   const config = getBackendConfig()
 
   if (!config) {
@@ -81,6 +82,35 @@ export async function proxyBackendRequest({ path, method = 'GET', body, search }
       cache: 'no-store',
     })
 
+    if (raw) {
+      const headers = new Headers()
+      const contentType = response.headers.get('content-type')
+      const contentDisposition = response.headers.get('content-disposition')
+      const contentLength = response.headers.get('content-length')
+      const partial = response.headers.get('x-scrapify-export-partial')
+
+      if (contentType) {
+        headers.set('Content-Type', contentType)
+      }
+
+      if (contentDisposition) {
+        headers.set('Content-Disposition', contentDisposition)
+      }
+
+      if (contentLength) {
+        headers.set('Content-Length', contentLength)
+      }
+
+      if (partial) {
+        headers.set('X-Scrapify-Export-Partial', partial)
+      }
+
+      return new NextResponse(response.body, {
+        status: response.status,
+        headers,
+      })
+    }
+
     const payload = await parseResponsePayload(response)
 
     if (response.status === 204) {
@@ -92,4 +122,13 @@ export async function proxyBackendRequest({ path, method = 'GET', body, search }
     const message = error instanceof Error ? error.message : 'Backend proxy failed'
     return NextResponse.json({ message }, { status: 502 })
   }
+}
+
+export function getBackendUnavailableResponse() {
+  return NextResponse.json(
+    {
+      message: 'SCRAPIFY_BACKEND_BASE_URL is not configured. Start the backend service and set the frontend backend URL.',
+    },
+    { status: 503 },
+  )
 }

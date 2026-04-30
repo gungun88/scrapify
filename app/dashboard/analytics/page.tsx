@@ -8,26 +8,36 @@ import { Panel } from '@/components/ui/Panel'
 import { StatCard } from '@/components/ui/StatCard'
 import { useAnalytics } from '@/hooks/useAnalytics'
 
-/**
- * Analytics page for trend tracking, source coverage, and delivery health.
- */
 export default function AnalyticsPage() {
-  const { data } = useAnalytics()
+  const { data, error, isError, isLoading } = useAnalytics()
 
-  if (!data) {
+  if (isLoading && !data) {
     return (
       <>
-        <Topbar title="数据看板" subtitle="查看采集趋势与导出表现" />
+        <Topbar title="数据看板" subtitle="查看采集趋势、站点覆盖和导出表现。" />
         <div className="flex flex-1 items-center justify-center p-5 text-sm text-text3">正在加载数据看板...</div>
       </>
     )
+  }
+
+  if (isError && !data) {
+    return (
+      <>
+        <Topbar title="数据看板" subtitle="查看采集趋势、站点覆盖和导出表现。" />
+        <div className="flex flex-1 items-center justify-center p-5 text-sm text-red-text">{error.message}</div>
+      </>
+    )
+  }
+
+  if (!data) {
+    return null
   }
 
   return (
     <>
       <Topbar
         title="数据看板"
-        subtitle="查看采集趋势与导出表现"
+        subtitle="查看采集趋势、站点覆盖和导出表现。"
         actions={
           <div className="flex gap-2">
             <Button variant="outline">最近 7 天</Button>
@@ -37,16 +47,15 @@ export default function AnalyticsPage() {
       />
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+        {isError ? <div className="rounded border border-red/20 bg-red-bg px-4 py-3 text-sm text-red-text">{error.message}</div> : null}
+
         <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           {data.stats.map((item) => (
             <StatCard key={item.label} {...item} />
           ))}
         </section>
 
-        <Panel
-          title="采集量趋势"
-          headerActions={<span className="text-[11px] font-medium text-text3">按天聚合 · 自动刷新</span>}
-        >
+        <Panel title="采集量趋势" headerActions={<span className="text-[11px] font-medium text-text3">按天聚合 · 自动刷新</span>}>
           <TrendChart data={data.trend} />
         </Panel>
 

@@ -1,31 +1,44 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { useCreateTask } from '@/hooks/useCreateTask'
+import { useFields } from '@/hooks/useFields'
 import { cn, formatDelayLabel } from '@/lib/utils'
-import { taskModalFields } from '@/lib/mock/tasks'
 import { useUIStore } from '@/lib/store/uiStore'
-import type { NewTaskForm } from '@/lib/types'
+import type { FieldConfig, NewTaskForm } from '@/lib/types'
 
-const initialForm: NewTaskForm = {
-  url: '',
-  mode: 'full',
-  region: 'auto',
-  fields: taskModalFields.filter((field) => field.defaultChecked).map((field) => field.id),
-  concurrency: 3,
-  delay: '1-3s',
+function createInitialForm(fields: FieldConfig[]): NewTaskForm {
+  return {
+    url: '',
+    mode: 'full',
+    region: 'auto',
+    fields: fields.filter((field) => field.enabled).map((field) => field.id),
+    concurrency: 3,
+    delay: '1-3s',
+  }
 }
 
 export function NewTaskModal() {
   const isOpen = useUIStore((state) => state.isNewTaskModalOpen)
   const closeModal = useUIStore((state) => state.closeNewTaskModal)
   const createTask = useCreateTask()
+  const fieldsQuery = useFields()
+  const availableFields = useMemo(() => fieldsQuery.data ?? [], [fieldsQuery.data])
 
-  const [form, setForm] = useState<NewTaskForm>(initialForm)
+  const [form, setForm] = useState<NewTaskForm>(() => createInitialForm([]))
   const [error, setError] = useState('')
   const selectedFieldCount = useMemo(() => form.fields.length, [form.fields.length])
+
+  useEffect(() => {
+    if (!isOpen || !availableFields.length) {
+      return
+    }
+
+    setForm(createInitialForm(availableFields))
+    setError('')
+  }, [availableFields, isOpen])
 
   if (!isOpen) {
     return null
@@ -45,11 +58,26 @@ export function NewTaskModal() {
   const handleClose = () => {
     closeModal()
     setError('')
-    setForm(initialForm)
+    setForm(createInitialForm(availableFields))
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (fieldsQuery.isLoading) {
+      setError('字段配置仍在加载，请稍后再试')
+      return
+    }
+
+    if (fieldsQuery.isError) {
+      setError(fieldsQuery.error.message)
+      return
+    }
+
+    if (availableFields.length === 0) {
+      setError('当前没有可用字段模板，请先检查后端字段配置')
+      return
+    }
 
     if (!form.url.trim()) {
       setError('请输入目标 URL')
@@ -57,7 +85,7 @@ export function NewTaskModal() {
     }
 
     if (form.fields.length === 0) {
-      setError('至少选择一个采集字段')
+      setError('请至少选择一个采集字段')
       return
     }
 
@@ -146,8 +174,15 @@ export function NewTaskModal() {
                 <label className="text-xs font-semibold text-text2">采集字段</label>
                 <span className="text-[11px] text-text3">已选 {selectedFieldCount} 项</span>
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {taskModalFields.map((field) => {
+              {fieldsQuery.isLoading ? (
+                <div className="rounded-sm border border-dashed border-border2 px-3 py-4 text-xs text-text3">正在加载字段模板...</div>
+              ) : fieldsQuery.isError ? (
+                <div className="rounded-sm border border-red/20 bg-red-bg px-3 py-4 text-xs text-red-text">{fieldsQuery.error.message}</div>
+              ) : availableFields.length === 0 ? (
+                <div className="rounded-sm border border-dashed border-border2 px-3 py-4 text-xs text-text3">当前没有可用字段模板。</div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {availableFields.map((field) => {
                   const active = form.fields.includes(field.id)
 
                   return (
@@ -173,8 +208,9 @@ export function NewTaskModal() {
                       {field.label}
                     </button>
                   )
-                })}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -215,7 +251,11 @@ export function NewTaskModal() {
             <Button type="button" variant="outline" onClick={handleClose}>
               取消
             </Button>
-            <Button type="submit" disabled={createTask.isPending} className={cn(createTask.isPending && 'cursor-not-allowed opacity-70')}>
+            <Button
+              type="submit"
+              disabled={createTask.isPending || fieldsQuery.isLoading || fieldsQuery.isError || availableFields.length === 0}
+              className={cn((createTask.isPending || fieldsQuery.isLoading || fieldsQuery.isError || availableFields.length === 0) && 'cursor-not-allowed opacity-70')}
+            >
               {createTask.isPending ? '创建中...' : '立即开始采集'}
             </Button>
           </div>

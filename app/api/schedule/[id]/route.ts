@@ -1,6 +1,4 @@
-import { NextResponse } from 'next/server'
-import { patchScheduleJob } from '@/lib/mock/schedule'
-import { proxyBackendRequest } from '@/lib/server/backend'
+import { getBackendUnavailableResponse, proxyBackendRequest } from '@/lib/server/backend'
 import type { ScheduleJob } from '@/lib/types'
 
 interface RouteContext {
@@ -22,11 +20,5 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return proxied
   }
 
-  const job = patchScheduleJob(params.id, body)
-
-  if (!job) {
-    return NextResponse.json({ message: 'Schedule not found' }, { status: 404 })
-  }
-
-  return NextResponse.json(job)
+  return getBackendUnavailableResponse()
 }

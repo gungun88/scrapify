@@ -26,7 +26,7 @@ export const analyticsSnapshot: AnalyticsSnapshot = {
   highlights: [
     { label: '峰值并发', value: '10 workers', note: '由 Gymshark 和 Cettire 两个任务触发' },
     { label: '最佳来源站', value: 'fashionnova.com', note: '近 7 天新增 SKU 8,420 个' },
-    { label: '异常告警', value: '3 条', note: '均来自价格变动超 12% 的监控任务' },
+    { label: '异常告警', value: '3 条', note: '均来自价格变化超过 12% 的监控任务' },
     { label: '平均字段完整度', value: '94.8%', note: '图片与库存字段覆盖率最高' },
   ],
 }

@@ -1,5 +1,7 @@
 import type { MonitorItem } from '@/lib/types'
 
+const mockCheckedAt = new Date().toISOString()
+
 export const monitorItems: MonitorItem[] = [
   {
     id: 'monitor-1',
@@ -10,6 +12,7 @@ export const monitorItems: MonitorItem[] = [
     change: 6.4,
     status: 'up',
     history: [49, 49, 52, 52, 54, 55, 58],
+    lastCheckedAt: mockCheckedAt,
   },
   {
     id: 'monitor-2',
@@ -20,6 +23,7 @@ export const monitorItems: MonitorItem[] = [
     change: -4.1,
     status: 'down',
     history: [99, 99, 98, 97, 97, 96, 94],
+    lastCheckedAt: mockCheckedAt,
   },
   {
     id: 'monitor-3',
@@ -30,6 +34,7 @@ export const monitorItems: MonitorItem[] = [
     change: 0,
     status: 'stable',
     history: [64, 64, 64, 64, 64, 64, 64],
+    lastCheckedAt: mockCheckedAt,
   },
   {
     id: 'monitor-4',
@@ -40,6 +45,7 @@ export const monitorItems: MonitorItem[] = [
     change: -8.7,
     status: 'down',
     history: [249, 239, 239, 229, 229, 219, 219],
+    lastCheckedAt: mockCheckedAt,
   },
   {
     id: 'monitor-5',
@@ -50,6 +56,7 @@ export const monitorItems: MonitorItem[] = [
     change: 3.9,
     status: 'up',
     history: [24, 24, 24, 25, 25, 26, 26],
+    lastCheckedAt: mockCheckedAt,
   },
   {
     id: 'monitor-6',
@@ -60,5 +67,6 @@ export const monitorItems: MonitorItem[] = [
     change: 0,
     status: 'outofstock',
     history: [1995, 1995, 1995, 1995, 0, 0, 0],
+    lastCheckedAt: mockCheckedAt,
   },
 ]

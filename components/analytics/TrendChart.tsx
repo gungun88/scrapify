@@ -1,14 +1,6 @@
 'use client'
 
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { ChartPoint } from '@/lib/types'
 
 interface TrendChartProps {
@@ -29,6 +21,7 @@ export function TrendChart({ data }: TrendChartProps) {
           : Array.isArray(value)
             ? Number(value[0] ?? 0)
             : 0
+
     return [`${numericValue.toLocaleString('en-US')} items`, '采集量'] as [string, string]
   }
 

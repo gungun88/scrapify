@@ -1,6 +1,4 @@
-import { NextResponse } from 'next/server'
-import { listScheduleJobs } from '@/lib/mock/schedule'
-import { proxyBackendRequest } from '@/lib/server/backend'
+import { getBackendUnavailableResponse, proxyBackendRequest } from '@/lib/server/backend'
 
 export async function GET(request: Request) {
   const proxied = await proxyBackendRequest({
@@ -12,5 +10,5 @@ export async function GET(request: Request) {
     return proxied
   }
 
-  return NextResponse.json(listScheduleJobs())
+  return getBackendUnavailableResponse()
 }
