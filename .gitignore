@@ -4,6 +4,7 @@ backend/dist/
 
 *.log
 *.tsbuildinfo
+.tmp-cettire.html
 
 .env
 .env.local
