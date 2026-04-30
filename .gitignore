@@ -1,6 +1,7 @@
 node_modules/
 .next/
 backend/dist/
+backend/data/runtime.json
 
 *.log
 *.tsbuildinfo

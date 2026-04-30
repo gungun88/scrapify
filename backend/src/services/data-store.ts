@@ -309,10 +309,15 @@ export async function loadDatabase() {
     state = normalizeDatabase(JSON.parse(raw) as Partial<DatabaseShape>)
     return state
   } catch {
-    const seed = createSeedDatabase()
-    state = seed
+    try {
+      const seedRaw = await fs.readFile(backendConfig.seedDataFile, 'utf8')
+      state = normalizeDatabase(JSON.parse(seedRaw) as Partial<DatabaseShape>)
+    } catch {
+      state = createSeedDatabase()
+    }
+
     await saveDatabase()
-    return seed
+    return state
   }
 }
 
