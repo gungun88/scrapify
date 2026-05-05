@@ -23,6 +23,11 @@ const REQUEST_TIMEOUT_MS = 15_000
 const RESULT_PREVIEW_LIMIT = 5
 const RUN_HISTORY_LIMIT = 10
 const FAILURE_HISTORY_LIMIT = 10
+const WOOCOMMERCE_PAGE_LIMIT = 100
+const WOOCOMMERCE_MAX_PAGES = 5
+const SITEMAP_MAX_URLS = 25
+const SITEMAP_INDEX_BRANCH_LIMIT = 3
+const PRODUCT_URL_PATTERN = /\/products?\//i
 
 let taskWorkerTimer: NodeJS.Timeout | null = null
 let taskWorkerBusy = false
@@ -856,6 +861,590 @@ function mapGenericProductToResult(product: GenericCollectedProduct, fields: str
   return row
 }
 
+interface CollectorOutcome {
+  items: TaskResultRow[]
+  pageCount: number
+  endpoint: string | null
+  source: string
+}
+
+interface WooCommerceImage {
+  src?: string | null
+  alt?: string | null
+  thumbnail?: string | null
+}
+
+interface WooCommercePrices {
+  price?: string | null
+  regular_price?: string | null
+  sale_price?: string | null
+  currency_minor_unit?: number | null
+  currency_symbol?: string | null
+}
+
+interface WooCommerceCategory {
+  name?: string | null
+}
+
+interface WooCommerceProduct {
+  id?: number | string
+  slug?: string
+  name?: string
+  permalink?: string
+  sku?: string | null
+  prices?: WooCommercePrices
+  images?: WooCommerceImage[]
+  categories?: WooCommerceCategory[]
+  is_in_stock?: boolean
+}
+
+function parseWooCommerceMinorUnitPrice(raw: string | number | null | undefined, minorUnit: number) {
+  if (raw === null || raw === undefined) {
+    return null
+  }
+
+  const numeric = typeof raw === 'number' ? raw : Number(raw)
+
+  if (!Number.isFinite(numeric)) {
+    return null
+  }
+
+  if (minorUnit > 0) {
+    const scale = 10 ** minorUnit
+    return Math.round((numeric / scale) * 100) / 100
+  }
+
+  return numeric
+}
+
+function mapWooCommerceProduct(product: WooCommerceProduct, origin: string, fields: string[]): TaskResultRow {
+  const minorUnit = typeof product.prices?.currency_minor_unit === 'number' ? product.prices.currency_minor_unit : 2
+  const price = parseWooCommerceMinorUnitPrice(product.prices?.price ?? null, minorUnit)
+  const regularPriceValue = parseWooCommerceMinorUnitPrice(product.prices?.regular_price ?? null, minorUnit)
+  const compareAtPrice =
+    regularPriceValue !== null && price !== null && regularPriceValue > price ? regularPriceValue : null
+  const handle = typeof product.slug === 'string' ? product.slug : ''
+  const directPermalink = typeof product.permalink === 'string' && product.permalink.trim() ? product.permalink.trim() : ''
+  const url = directPermalink || (handle ? `${origin}/product/${handle}` : origin)
+  const id = product.id !== undefined && product.id !== null ? String(product.id) : handle || `product-${randomUUID().slice(0, 8)}`
+  const tags = Array.isArray(product.categories)
+    ? product.categories
+        .map((category) => (category && typeof category.name === 'string' ? category.name.trim() : ''))
+        .filter((value) => value.length > 0)
+    : []
+  const images = collectImageUrls(origin, product.images ?? [])
+
+  const generic = normalizeGenericProduct({
+    id,
+    handle,
+    url,
+    title: typeof product.name === 'string' ? product.name : null,
+    sku: typeof product.sku === 'string' ? product.sku : null,
+    price,
+    compareAtPrice,
+    images,
+    inventory: typeof product.is_in_stock === 'boolean' ? (product.is_in_stock ? 1 : 0) : null,
+    tags: [...new Set(tags)],
+    vendor: null,
+  })
+
+  return mapGenericProductToResult(generic, fields)
+}
+
+async function fetchWooCommercePage(origin: string, path: string, page: number) {
+  const endpoint = new URL(path, origin)
+  endpoint.searchParams.set('per_page', String(WOOCOMMERCE_PAGE_LIMIT))
+  endpoint.searchParams.set('page', String(page))
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'Scrapify/0.1',
+      },
+      signal: controller.signal,
+    })
+
+    if (response.status === 404) {
+      return {
+        endpoint: endpoint.toString(),
+        notFound: true,
+        products: [] as WooCommerceProduct[],
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(`WooCommerce request failed with HTTP ${response.status}.`)
+    }
+
+    const payload = (await response.json()) as unknown
+
+    if (!Array.isArray(payload)) {
+      throw new Error('WooCommerce response did not contain a products array.')
+    }
+
+    return {
+      endpoint: endpoint.toString(),
+      notFound: false,
+      products: payload as WooCommerceProduct[],
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('WooCommerce request timed out.')
+    }
+
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function fetchSitemapXml(url: string) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        accept: 'application/xml,text/xml,*/*',
+        'user-agent': 'Scrapify/0.1',
+      },
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const body = await response.text()
+    const trimmed = body.trim()
+
+    if (
+      !trimmed.startsWith('<?xml') &&
+      !trimmed.startsWith('<urlset') &&
+      !trimmed.startsWith('<sitemapindex')
+    ) {
+      return null
+    }
+
+    return {
+      endpoint: url,
+      body,
+      isIndex: trimmed.includes('<sitemapindex'),
+    }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function parseSitemapLocations(xml: string) {
+  const locations = new Set<string>()
+
+  for (const match of xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)) {
+    const value = decodeHtml(match[1] || '').trim()
+    if (value) {
+      locations.add(value)
+    }
+  }
+
+  return [...locations]
+}
+
+async function discoverSitemapProductUrls(parsedUrl: URL): Promise<string[]> {
+  const candidates = ['/sitemap_products_1.xml', '/sitemap.xml', '/sitemap_index.xml']
+  const visited = new Set<string>()
+  const collected = new Set<string>()
+
+  for (const candidate of candidates) {
+    if (collected.size >= SITEMAP_MAX_URLS) {
+      break
+    }
+
+    const targetUrl = new URL(candidate, parsedUrl.origin).toString()
+    if (visited.has(targetUrl)) {
+      continue
+    }
+
+    visited.add(targetUrl)
+
+    const result = await fetchSitemapXml(targetUrl)
+    if (!result) {
+      continue
+    }
+
+    const locations = parseSitemapLocations(result.body)
+
+    if (result.isIndex) {
+      const childSitemaps = locations.slice(0, SITEMAP_INDEX_BRANCH_LIMIT)
+      for (const child of childSitemaps) {
+        if (collected.size >= SITEMAP_MAX_URLS) {
+          break
+        }
+
+        if (visited.has(child)) {
+          continue
+        }
+
+        visited.add(child)
+
+        const childResult = await fetchSitemapXml(child)
+        if (!childResult) {
+          continue
+        }
+
+        for (const loc of parseSitemapLocations(childResult.body)) {
+          if (PRODUCT_URL_PATTERN.test(loc)) {
+            collected.add(loc)
+            if (collected.size >= SITEMAP_MAX_URLS) {
+              break
+            }
+          }
+        }
+      }
+    } else {
+      for (const loc of locations) {
+        if (PRODUCT_URL_PATTERN.test(loc)) {
+          collected.add(loc)
+          if (collected.size >= SITEMAP_MAX_URLS) {
+            break
+          }
+        }
+      }
+    }
+
+    if (collected.size > 0) {
+      break
+    }
+  }
+
+  return [...collected].slice(0, SITEMAP_MAX_URLS)
+}
+
+async function tryShopifyCollector(
+  record: TaskRuntimeRecord,
+  parsedUrl: URL,
+  delayMs: number,
+): Promise<CollectorOutcome> {
+  const source = 'shopify-products-json'
+  const candidatePaths = buildCandidatePaths(parsedUrl)
+
+  appendLog(record, 'info', `Shopify collector preparing ${candidatePaths.length} endpoint candidate(s).`)
+  await saveDatabase()
+
+  let bestItems: TaskResultRow[] = []
+  let bestPageCount = 0
+  let bestEndpoint: string | null = null
+
+  for (const path of candidatePaths) {
+    let pathItems: TaskResultRow[] = []
+    let pathPageCount = 0
+    let pathEndpoint: string | null = null
+    let foundProducts = false
+
+    for (let page = 1; page <= SHOPIFY_MAX_PAGES; page += 1) {
+      let response: Awaited<ReturnType<typeof fetchProductsPage>>
+
+      try {
+        response = await fetchProductsPage(parsedUrl.origin, path, page)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Collector request failed.'
+        appendLog(record, 'warn', `Shopify endpoint failed: ${new URL(path, parsedUrl.origin).pathname} (${message})`)
+        break
+      }
+
+      if (response.notFound) {
+        appendLog(record, 'warn', `Shopify endpoint not found: ${new URL(response.endpoint).pathname}`)
+        break
+      }
+
+      const mappedItems = response.products.map((product) =>
+        mapProductToResult(product, parsedUrl.origin, record.fields),
+      )
+
+      if (page === 1 && mappedItems.length === 0) {
+        appendLog(record, 'warn', `Shopify endpoint returned no products: ${new URL(response.endpoint).pathname}`)
+        break
+      }
+
+      if (!pathEndpoint) {
+        pathEndpoint = response.endpoint
+      }
+
+      foundProducts = foundProducts || mappedItems.length > 0
+      pathItems = [...pathItems, ...mappedItems]
+      pathPageCount = page
+
+      record.itemCount = pathItems.length
+      record.progress = Math.min(95, 15 + page * 20)
+      record.resultItems = pathItems
+      record.updatedAtMs = Date.now()
+      record.lastHeartbeatAt = nowIso(record.updatedAtMs)
+      record.elapsed = formatElapsed(Math.max(0, record.updatedAtMs - record.startedAtMs))
+
+      updateActiveRun(record, {
+        status: 'running',
+        itemCount: pathItems.length,
+        pageCount: page,
+      })
+
+      appendLog(record, 'info', `Shopify fetched page ${page} with ${mappedItems.length} product(s).`)
+      await saveDatabase()
+
+      if (mappedItems.length < SHOPIFY_PAGE_LIMIT) {
+        break
+      }
+
+      await wait(delayMs)
+    }
+
+    if (foundProducts) {
+      bestItems = pathItems
+      bestPageCount = pathPageCount
+      bestEndpoint = pathEndpoint
+      break
+    }
+  }
+
+  return {
+    items: bestItems,
+    pageCount: bestPageCount,
+    endpoint: bestEndpoint,
+    source,
+  }
+}
+
+async function tryWooCommerceCollector(
+  record: TaskRuntimeRecord,
+  parsedUrl: URL,
+  delayMs: number,
+): Promise<CollectorOutcome> {
+  const source = 'woocommerce-store-api'
+  const candidatePaths = ['/wp-json/wc/store/v1/products', '/wp-json/wc/store/products']
+
+  appendLog(record, 'info', `WooCommerce collector preparing ${candidatePaths.length} endpoint candidate(s).`)
+  updateActiveRunSource(record, source)
+  await saveDatabase()
+
+  let bestItems: TaskResultRow[] = []
+  let bestPageCount = 0
+  let bestEndpoint: string | null = null
+
+  for (const path of candidatePaths) {
+    let pathItems: TaskResultRow[] = []
+    let pathPageCount = 0
+    let pathEndpoint: string | null = null
+    let foundProducts = false
+
+    for (let page = 1; page <= WOOCOMMERCE_MAX_PAGES; page += 1) {
+      let response: Awaited<ReturnType<typeof fetchWooCommercePage>>
+
+      try {
+        response = await fetchWooCommercePage(parsedUrl.origin, path, page)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'WooCommerce request failed.'
+        appendLog(record, 'warn', `WooCommerce endpoint failed: ${new URL(path, parsedUrl.origin).pathname} (${message})`)
+        break
+      }
+
+      if (response.notFound) {
+        appendLog(record, 'warn', `WooCommerce endpoint not found: ${new URL(response.endpoint).pathname}`)
+        break
+      }
+
+      const mappedItems = response.products.map((product) =>
+        mapWooCommerceProduct(product, parsedUrl.origin, record.fields),
+      )
+
+      if (page === 1 && mappedItems.length === 0) {
+        appendLog(record, 'warn', `WooCommerce endpoint returned no products: ${new URL(response.endpoint).pathname}`)
+        break
+      }
+
+      if (!pathEndpoint) {
+        pathEndpoint = response.endpoint
+      }
+
+      foundProducts = foundProducts || mappedItems.length > 0
+      pathItems = [...pathItems, ...mappedItems]
+      pathPageCount = page
+
+      record.itemCount = pathItems.length
+      record.progress = Math.min(95, 20 + page * 18)
+      record.resultItems = pathItems
+      record.updatedAtMs = Date.now()
+      record.lastHeartbeatAt = nowIso(record.updatedAtMs)
+      record.elapsed = formatElapsed(Math.max(0, record.updatedAtMs - record.startedAtMs))
+
+      updateActiveRun(record, {
+        status: 'running',
+        itemCount: pathItems.length,
+        pageCount: page,
+      })
+
+      appendLog(record, 'info', `WooCommerce fetched page ${page} with ${mappedItems.length} product(s).`)
+      await saveDatabase()
+
+      if (mappedItems.length < WOOCOMMERCE_PAGE_LIMIT) {
+        break
+      }
+
+      await wait(delayMs)
+    }
+
+    if (foundProducts) {
+      bestItems = pathItems
+      bestPageCount = pathPageCount
+      bestEndpoint = pathEndpoint
+      break
+    }
+  }
+
+  return {
+    items: bestItems,
+    pageCount: bestPageCount,
+    endpoint: bestEndpoint,
+    source,
+  }
+}
+
+async function trySitemapCollector(
+  record: TaskRuntimeRecord,
+  parsedUrl: URL,
+  delayMs: number,
+): Promise<CollectorOutcome> {
+  const source = 'sitemap-html'
+
+  appendLog(record, 'info', 'Sitemap collector starting URL discovery.')
+  updateActiveRunSource(record, source)
+  await saveDatabase()
+
+  let productUrls: string[] = []
+  try {
+    productUrls = await discoverSitemapProductUrls(parsedUrl)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Sitemap discovery failed.'
+    appendLog(record, 'warn', `Sitemap discovery failed: ${message}`)
+    return { items: [], pageCount: 0, endpoint: null, source }
+  }
+
+  if (productUrls.length === 0) {
+    appendLog(record, 'warn', 'Sitemap discovery returned no product URLs.')
+    return { items: [], pageCount: 0, endpoint: null, source }
+  }
+
+  appendLog(record, 'info', `Sitemap collector queued ${productUrls.length} product URL(s).`)
+  await saveDatabase()
+
+  const collected: TaskResultRow[] = []
+  const sitemapDelayMs = Math.max(150, Math.round(delayMs / 2))
+  let lastEndpoint: string | null = null
+
+  for (let index = 0; index < productUrls.length; index += 1) {
+    const productUrl = productUrls[index]
+    let html = ''
+
+    try {
+      html = await fetchHtmlPage(productUrl)
+      lastEndpoint = productUrl
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Sitemap product fetch failed.'
+      appendLog(record, 'warn', `Sitemap product fetch failed (${productUrl}): ${message}`)
+      continue
+    }
+
+    let parsedProductUrl: URL
+    try {
+      parsedProductUrl = new URL(productUrl)
+    } catch {
+      continue
+    }
+
+    const fallbackItems = collectFallbackHtmlProducts(html, parsedProductUrl).map((item) =>
+      mapGenericProductToResult(item, record.fields),
+    )
+
+    if (fallbackItems.length > 0) {
+      collected.push(...fallbackItems)
+    }
+
+    record.itemCount = collected.length
+    record.progress = Math.min(95, 20 + Math.floor(((index + 1) / productUrls.length) * 70))
+    record.resultItems = collected
+    record.updatedAtMs = Date.now()
+    record.lastHeartbeatAt = nowIso(record.updatedAtMs)
+    record.elapsed = formatElapsed(Math.max(0, record.updatedAtMs - record.startedAtMs))
+
+    updateActiveRun(record, {
+      status: 'running',
+      itemCount: collected.length,
+      pageCount: index + 1,
+    })
+
+    if ((index + 1) % 5 === 0 || index === productUrls.length - 1) {
+      appendLog(
+        record,
+        'info',
+        `Sitemap progress: ${index + 1}/${productUrls.length} URL(s) processed, ${collected.length} item(s).`,
+      )
+      await saveDatabase()
+    }
+
+    if (index < productUrls.length - 1) {
+      await wait(sitemapDelayMs)
+    }
+  }
+
+  return {
+    items: collected,
+    pageCount: productUrls.length,
+    endpoint: lastEndpoint,
+    source,
+  }
+}
+
+async function tryHtmlFallbackCollector(
+  record: TaskRuntimeRecord,
+  parsedUrl: URL,
+  _delayMs: number,
+): Promise<CollectorOutcome> {
+  const source = 'html-structured-data'
+
+  appendLog(record, 'info', 'HTML structured-data fallback starting.')
+  updateActiveRunSource(record, source)
+  await saveDatabase()
+
+  let html = ''
+  try {
+    html = await fetchHtmlPage(parsedUrl.toString())
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'HTML fallback fetch failed.'
+    appendLog(record, 'warn', `HTML fallback fetch failed: ${message}`)
+    return { items: [], pageCount: 0, endpoint: null, source }
+  }
+
+  const items = collectFallbackHtmlProducts(html, parsedUrl).map((item) =>
+    mapGenericProductToResult(item, record.fields),
+  )
+
+  if (items.length === 0) {
+    return { items: [], pageCount: 0, endpoint: parsedUrl.toString(), source }
+  }
+
+  appendLog(record, 'info', `HTML fallback collected ${items.length} item(s).`)
+
+  return {
+    items,
+    pageCount: 1,
+    endpoint: parsedUrl.toString(),
+    source,
+  }
+}
+
 async function executeTask(taskId: string) {
   const db = await getDatabase()
   const record = db.tasks.find((task) => task.id === taskId)
@@ -867,121 +1456,54 @@ async function executeTask(taskId: string) {
 
   try {
     const parsedUrl = normalizeTaskUrl(record.url)
-    const candidatePaths = buildCandidatePaths(parsedUrl)
     const delayMs = parseDelayMs(record.delay)
 
-    appendLog(record, 'info', `Collector prepared ${candidatePaths.length} Shopify endpoint candidate(s) and HTML fallback.`)
+    appendLog(
+      record,
+      'info',
+      'Collector pipeline ready: shopify-products-json -> woocommerce-store-api -> sitemap-html -> html-structured-data.',
+    )
     await saveDatabase()
 
-    let collectedItems: TaskResultRow[] = []
-    let pageCount = 0
-    let selectedEndpoint: string | null = null
-    let selectedSource = 'shopify-products-json'
+    const collectors: Array<
+      (record: TaskRuntimeRecord, parsedUrl: URL, delayMs: number) => Promise<CollectorOutcome>
+    > = [tryShopifyCollector, tryWooCommerceCollector, trySitemapCollector, tryHtmlFallbackCollector]
 
-    for (const path of candidatePaths) {
-      let pathItems: TaskResultRow[] = []
-      let foundProducts = false
+    let outcome: CollectorOutcome | null = null
 
-      for (let page = 1; page <= SHOPIFY_MAX_PAGES; page += 1) {
-        let response: Awaited<ReturnType<typeof fetchProductsPage>>
-
-        try {
-          response = await fetchProductsPage(parsedUrl.origin, path, page)
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Collector request failed.'
-          appendLog(record, 'warn', `Endpoint failed: ${new URL(path, parsedUrl.origin).pathname} (${message})`)
-          break
-        }
-
-        if (response.notFound) {
-          appendLog(record, 'warn', `Endpoint not found: ${new URL(response.endpoint).pathname}`)
-          break
-        }
-
-        const mappedItems = response.products.map((product) => mapProductToResult(product, parsedUrl.origin, record.fields))
-
-        if (page === 1 && mappedItems.length === 0) {
-          appendLog(record, 'warn', `Endpoint returned no products: ${new URL(response.endpoint).pathname}`)
-          break
-        }
-
-        if (!selectedEndpoint) {
-          selectedEndpoint = response.endpoint
-        }
-
-        foundProducts = foundProducts || mappedItems.length > 0
-        pathItems = [...pathItems, ...mappedItems]
-        pageCount = page
-
-        record.itemCount = pathItems.length
-        record.progress = Math.min(95, 15 + page * 20)
-        record.resultItems = pathItems
-        record.updatedAtMs = Date.now()
-        record.lastHeartbeatAt = nowIso(record.updatedAtMs)
-        record.elapsed = formatElapsed(Math.max(0, record.updatedAtMs - record.startedAtMs))
-
-        updateActiveRun(record, {
-          status: 'running',
-          itemCount: pathItems.length,
-          pageCount: page,
-        })
-
-        appendLog(record, 'info', `Fetched page ${page} with ${mappedItems.length} product(s).`)
-        await saveDatabase()
-
-        if (mappedItems.length < SHOPIFY_PAGE_LIMIT) {
-          break
-        }
-
-        await wait(delayMs)
-      }
-
-      if (foundProducts) {
-        collectedItems = pathItems
+    for (const collector of collectors) {
+      const result = await collector(record, parsedUrl, delayMs)
+      if (result.items.length > 0) {
+        outcome = result
         break
       }
     }
 
-    if (collectedItems.length === 0) {
-      appendLog(record, 'warn', 'Shopify JSON collector produced no result; attempting HTML structured-data fallback.')
-      await saveDatabase()
-
-      const html = await fetchHtmlPage(parsedUrl.toString())
-      const fallbackItems = collectFallbackHtmlProducts(html, parsedUrl).map((item) =>
-        mapGenericProductToResult(item, record.fields),
+    if (!outcome || outcome.items.length === 0) {
+      throw new Error(
+        'No products could be collected via Shopify products.json, WooCommerce store API, sitemap discovery, or HTML structured-data fallback.',
       )
-
-      if (fallbackItems.length === 0) {
-        throw new Error('No public Shopify product JSON data or HTML structured product data could be collected from the target URL.')
-      }
-
-      collectedItems = fallbackItems
-      pageCount = Math.max(pageCount, 1)
-      selectedEndpoint = parsedUrl.toString()
-      selectedSource = 'html-structured-data'
-      updateActiveRunSource(record, selectedSource)
-      appendLog(record, 'info', `HTML fallback collected ${fallbackItems.length} item(s).`)
     }
 
-    record.resultItems = collectedItems
+    record.resultItems = outcome.items
     record.result = {
-      source: selectedSource,
+      source: outcome.source,
       collectionUrl: parsedUrl.toString(),
-      itemCount: collectedItems.length,
-      pageCount,
+      itemCount: outcome.items.length,
+      pageCount: Math.max(outcome.pageCount, 1),
       exportedAt: nowIso(Date.now()),
-      preview: collectedItems.slice(0, RESULT_PREVIEW_LIMIT).map((row) => ({ ...row })),
+      preview: outcome.items.slice(0, RESULT_PREVIEW_LIMIT).map((row) => ({ ...row })),
     }
 
     updateActiveRun(record, {
       status: 'running',
-      itemCount: collectedItems.length,
-      pageCount,
+      itemCount: outcome.items.length,
+      pageCount: Math.max(outcome.pageCount, 1),
     })
-    updateActiveRunSource(record, selectedSource)
+    updateActiveRunSource(record, outcome.source)
 
-    if (selectedEndpoint) {
-      appendLog(record, 'info', `Collector completed via ${selectedEndpoint}.`)
+    if (outcome.endpoint) {
+      appendLog(record, 'info', `Collector completed via ${outcome.endpoint}.`)
     }
 
     markTaskDone(record, Date.now())

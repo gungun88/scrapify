@@ -2,6 +2,8 @@ node_modules/
 .next/
 backend/dist/
 backend/data/runtime.json
+backend/data/runtime.json.bak-*
+.dev-pg-data/
 
 *.log
 *.tsbuildinfo

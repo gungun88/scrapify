@@ -26,7 +26,8 @@
 - ~~日志搜索已完成：支持按关键字与日志级别组合筛选~~
 - ~~任务结果摘要与运行历史已完成：任务详情可展示结果预览、失败明细和最近运行记录~~
 - ~~前端已移除正式数据链路中的 mock fallback：后端不可用时会显式返回错误，而不是继续展示演示数据~~
-- 局部占位信息仍待清理：例如侧边栏监控 badge 仍是硬编码值，不是来自真实统计聚合
+- ~~局部占位信息仍待清理：例如侧边栏监控 badge 仍是硬编码值，不是来自真实统计聚合~~（已在第 13 次整理处理）
+- ~~监控页"添加站点"与代理页"新增节点"按钮已接入真实写入：第 17 次整理已落地~~
 
 ### 后端
 
@@ -43,16 +44,115 @@
 - ~~真实采集器已接入首个最小可用版本：`task-runtime` 会抓取 Shopify 公共 `products.json` 接口，按页写回日志、结果预览、失败明细与运行历史~~
 - ~~调度器已真实化到本地 worker 层：`schedule` 会按 `cron` 计算下一次运行并自动创建任务~~
 - ~~任务结果导出链路已完成：新增 `GET /api/tasks/:id/export`，支持独立 CSV / JSON 下载，并在旧任务缺少完整结果时回退导出预览数据~~
-- 非 Shopify / 需 JS 渲染站点未覆盖：当前真实采集器仅覆盖公开可访问的 Shopify JSON 端点
-- 价格监控未真实化：`monitor` 当前仍是后端伪运行时，不是真实站点采集
-- 代理池健康检查未完成：`proxy` 当前仍是伪探活/心跳模拟，不是真实代理检测
-- 生产级存储未完成：尚未切换 `PostgreSQL / Redis`
-- 鉴权与多租户未完成：没有 `JWT / Session / RBAC`
-- 部署链路未完成：没有 Docker 化、CI/CD、可观测性接入
+- ~~监控 / 代理 CRUD 已完成：新增 `POST /api/monitor`、`DELETE /api/monitor/:id`、`POST /api/proxy`、`DELETE /api/proxy/:id`，前端"添加站点 / 新增节点"按钮和卡片 / 行级删除按钮已接入真实写入~~
+- ~~非 Shopify 采集器已扩展：`task-runtime` 抓取链路升级为 `shopify-products-json → woocommerce-store-api → sitemap-html → html-structured-data` 四段回退~~
+- ~~Postgres 持久化已切换：`data-store` 内部改为 Drizzle + PG（保留对外签名），`saveDatabase` 加合并写入；Redis 已接入 `@fastify/rate-limit` 全局限流~~
+- 复杂纯前端渲染（SPA 列表页）站点的真实采集仍未覆盖：sitemap-html 回退命中率取决于站点是否在 sitemap 中暴露产品 URL，以及详情页是否带 JSON-LD / `__NEXT_DATA__`
+- ~~价格监控未真实化：`monitor` 当前仍是后端伪运行时，不是真实站点采集~~（第 14 / 16 次整理已落地真实 HTTP 抓取 + 多源价格打分）
+- ~~代理池健康检查未完成：`proxy` 当前仍是伪探活/心跳模拟，不是真实代理检测~~（第 15 次整理已落地真实 TCP 探活）
+- ~~生产级存储未完成：尚未切换 `PostgreSQL / Redis`~~（Phase 0 已落地 PG + Redis）
+- 鉴权与多租户未完成：没有 `JWT / Session / RBAC`（Phase 1 计划）
+- 部署链路未完成：没有 Docker 化、CI/CD、可观测性接入（Phase 4-6 计划）
 
 ---
 
 ## 2. 开发记录
+
+## 2026-05-04 第 19 次整理：任务中心精简 + Shopify CSV 导出对齐
+
+### 前端
+
+- ~~`app/dashboard/tasks/page.tsx` 已精简：移除底部"采集字段配置"和"任务分类分布"两个重复面板（这两块内容在专门的 `/dashboard/fields` 与 `/dashboard/analytics` 页里都有完整版本），任务中心专注"管理采集任务"本身~~
+- ~~顶部"导出结果"按钮已重命名为"导出 Shopify CSV"，并增加 title 提示当前选中任务时按 Shopify 官方模板导出~~
+- 未完成事项：导出按钮目前只支持单任务、CSV 一种格式；未来如果需要"勾选多任务批量导出"或"导出 JSON 用于二次处理"，需要在任务列表加多选 + 顶部下拉菜单
+
+### 后端
+
+- ~~`/api/tasks/:id/export?format=csv` 已切换到 Shopify Admin → Products → Export 官方 CSV 模板：57 列固定列头，列名 / 顺序 / 大小写完全对齐（Handle / Title / Body (HTML) / Vendor / Tags / Published / Option1 / Variant SKU / Variant Inventory Tracker / Variant Price / Variant Compare At Price / Image Src / ... / Status）~~
+- ~~实现 `buildShopifyCsvContent` 把任务结果 row 映射到 Shopify 字段：Handle 取自 `handle` 或从 URL 抽 `/products/<slug>`；Tags 用逗号 join；Inventory Qty / Price / Compare At Price 走数值；Image Src 第一行第一张图，多图自动展开成多行（仅 Handle + Image Src + Image Position）；默认值 `Published=TRUE / Variant Inventory Tracker=shopify / Variant Inventory Policy=deny / Variant Fulfillment Service=manual / Gift Card=FALSE / Variant Weight Unit=kg / Status=draft`~~
+- ~~CSV 文件名按 Shopify 习惯改为 `products_export-<task-id>.csv`；保留 UTF-8 BOM 让 Excel / Numbers 直接识别中文~~
+- ~~JSON 导出格式不变（开发者直接处理结构化数据更方便）~~
+- ~~验证：用之前真实抓取过的 Gymshark 任务（3000 商品）实测导出，列头与 `products_export.csv` 模板完全一致；行内容含 handle / title / SKU / price / image url 等真实数据~~
+- 未完成事项：Shopify 原始模板有 28 个店铺特定 metafield 列（Material / shippingLabel / EComposer / Backrest type / Furniture metafields 等），是各家自定义的，无法通用导出。当前导出 57 列对**任何**Shopify 店铺都能直接 Import。Phase 2/3 后可加"自定义列模板"功能让用户自定义额外 metafield 列
+
+## 2026-05-04 第 18 次整理：上线规划文档 + Phase 0 基础设施切换
+
+### 文档
+
+- ~~新增项目级《Scrapify 公开上线规划文档》`scrapify-launch-spec.md`：列出 7 阶段路线图（基础设施切换 / 用户系统 / 额度 / 代理池 / Docker / 可观测 / 测试 / 合规），与现有前端、后端规格文档平级~~
+- ~~确认四项关键决策：邮箱密码（自控）、自部署 Postgres+Redis、自有 VPS+Docker Compose、免费+额度限制~~
+
+### 后端（Phase 0：基础设施切换）
+
+- ~~引入 Drizzle ORM + Postgres：新建 `backend/src/db/schema.ts`（占位 users 表 + 6 张业务表）、`backend/src/db/client.ts`（PG Pool + Redis 连接 + `closeDbConnections()`）、`backend/drizzle.config.ts`、首次迁移 `backend/src/db/migrations/0000_*.sql`~~
+- ~~`backend/src/db/client.ts` 已升级为双驱动：`DATABASE_URL=pglite://...` 走嵌入式 PGlite（无 docker 依赖，启动时自动跑迁移），`DATABASE_URL=postgres://...` 走真 PG；`REDIS_URL=mock://` 走 ioredis-mock，`REDIS_URL=redis://...` 走真 Redis~~
+- ~~新增 `@electric-sql/pglite` + `ioredis-mock` 依赖，让本地无 docker 环境也能开发 / 跑 CI / 临时演示~~
+- ~~`backend/src/services/data-store.ts` 已切换到 Postgres：保留 `loadDatabase / saveDatabase / getDatabase` 对外签名不变（worker 与 routes 0 改动），内部从 PG 读写、维护内存 state；`saveDatabase` 加了 in-flight + pending 合并写入，避免高频心跳触发 N 次 truncate+insert~~
+- ~~新增 `backend/scripts/migrate-from-json.ts`：把现有 `backend/data/runtime.json` 导入 PG，并备份原文件为 `runtime.json.bak-<timestamp>`~~
+- ~~`backend/src/server.ts` 接入 `@fastify/rate-limit`（Redis store，全局默认 100 req/min/ip），`cors` 同步开启 `credentials: true` 以便 Phase 1 的 cookie 转发；同步加 SIGINT/SIGTERM graceful shutdown，让 PGlite 释放 `postmaster.pid` 锁，避免下次启动崩溃~~
+- ~~`backend/src/config.ts` 扩展：`databaseUrl / redisUrl / rateLimit`~~
+- ~~新增 `backend/src/env-loader.ts`：side-effect 加载 `.env.local → .env`，所有后端入口（server / drizzle.config / scripts）顶部统一 import，避免 `db:migrate` 时找不到 `DATABASE_URL` 之类问题~~
+- ~~`.env.example` 默认配置改为嵌入式模式（pglite + mock），生产时手动切到 `postgres://` + `redis://`~~
+- ~~`package.json` 新增依赖：`drizzle-orm` / `drizzle-kit`(dev) / `pg` / `@types/pg`(dev) / `ioredis` / `@fastify/rate-limit` / `dotenv` / `@electric-sql/pglite` / `ioredis-mock`，新增脚本：`db:generate / db:migrate / db:studio / db:migrate-from-json / db:reset / infra:up / infra:down`~~
+- ~~新增 `docker-compose.dev.yml`：`postgres:16-alpine` + `redis:7-alpine`，含 healthcheck，挂载持久化卷~~
+- ~~新增 `deploy/phase-0-verify.md`：双模式验证手册（嵌入式 / 生产），含 7 类常见故障排错（PGlite stale state / 端口冲突 / 连接失败 / env 未加载 / 503 / Redis fallback 等）~~
+
+### 前端
+
+- 本次无前端改动：现有 6 页继续沿用，不依赖底层存储类型
+
+### 验证
+
+- ~~`npm install` 通过（新增 44 个包）~~
+- ~~`npx drizzle-kit generate` 成功生成首次迁移 SQL（7 张表）~~
+- ~~`npm run backend:check` 通过~~
+- ~~`npm run build` 通过~~
+- ~~实战启动验证已通过：本机无 Docker / 原生 PG / 原生 Redis 环境下，走嵌入式模式（PGlite + ioredis-mock）端到端跑通~~
+  - ~~`/api/health` 返回 200~~
+  - ~~6 个 GET API（tasks / fields / monitor / proxy / schedule / analytics）数据完整~~
+  - ~~POST `/api/monitor` / `/api/proxy` 写入成功，DELETE 返回 204；非法端口校验 400~~
+  - ~~创建一个真实 Shopify 任务（gymshark）→ worker 推进 12 页 → status=done, itemCount=3000, source=shopify-products-json~~
+  - ~~前端 `npm run dev` 启动，curl `http://localhost:3001/dashboard/tasks` 返回 200 + 16KB HTML（中文渲染正常）；`/api/tasks` 通过前端代理转发拿到 7 条数据~~
+- ~~PGlite 嵌入式模式补强：`server.ts` 接入 SIGINT/SIGTERM 优雅关闭释放锁；`initDb` 启动前自动清掉 stale `postmaster.pid`；新增 `npm run db:reset` 命令在异常退出后一键重置数据目录~~
+- 未完成事项：本机无 docker，未在真 Postgres + Redis 上跑过 `npm run db:migrate` / `migrate-from-json`，但 schema 与脚本逻辑通过类型检查 + Drizzle generate 验证；用户在自己的部署机器上验证生产模式时按 `deploy/phase-0-verify.md` 第 3 节操作即可
+
+
+
+## 2026-05-03 第 17 次整理：监控 / 代理 CRUD 入口与非 Shopify 采集器扩展
+
+### 前端
+
+- ~~监控页"添加站点"按钮已接入真实写入：新增 `NewMonitorModal` 弹窗（URL / 站点名称 / 币种），通过 `useCreateMonitorItem` mutation 提交后自动刷新列表~~
+- ~~代理页"新增节点"按钮已接入真实写入：新增 `NewProxyModal` 弹窗（IP / 端口 / 国家 / 国旗代码），通过 `useCreateProxyItem` mutation 提交后立即触发后端探活刷新~~
+- ~~`MonitorCard` 与 `ProxyTable` 已补充行级删除按钮：调用 `useDeleteMonitorItem` / `useDeleteProxyItem`，删除前 `window.confirm` 二次确认，成功后局部立即从列表移除并触发后台刷新~~
+- ~~新增前端 API 代理路由：`/api/monitor/items`、`/api/monitor/items/[id]`、`/api/proxy/items`、`/api/proxy/items/[id]`，与已有 `/refresh` POST 路由解耦避免冲突~~
+- ~~`uiStore` 已扩展两个开关：`isNewMonitorModalOpen` / `isNewProxyModalOpen` 与对应 open / close action~~
+
+### 后端
+
+- ~~`POST /api/monitor` 已落地：URL 用 `new URL()` 校验，缺省 `site` 时取 hostname、缺省 `currency` 取 `$`，新建后立即触发一次 `runMonitorRefresh()`~~
+- ~~`DELETE /api/monitor/:id` 已落地：找到则 splice 并 `saveDatabase()`，404 缺失返回明确错误~~
+- ~~`POST /api/proxy` 已落地：基础 IP 字符串与端口（1-65535 整数）校验，新建后立即触发一次 `runProxyRefresh()`~~
+- ~~`DELETE /api/proxy/:id` 已落地：同上语义~~
+- ~~`task-runtime` 抓取链路已扩展为 4 段：`shopify-products-json → woocommerce-store-api → sitemap-html → html-structured-data`，每段独立采集器、独立 source 标识，前一段无产出才进入下一段~~
+- ~~新增 WooCommerce Store API 采集器：候选端点 `/wp-json/wc/store/v1/products` 与 `/wp-json/wc/store/products`，分页 `per_page=100`，按 `currency_minor_unit` 自动还原原币金额，最多 5 页~~
+- ~~新增 Sitemap 通用采集器：依次探测 `/sitemap_products_1.xml / /sitemap.xml / /sitemap_index.xml`，支持 sitemap index 一层递归（最多 3 个子 sitemap），过滤 `/product/` 与 `/products/` URL 后限速顺序抓取，最多 25 条产品 URL~~
+- ~~`executeTask` 主体已重写为采集器链路调度：每个采集器返回 `{ items, pageCount, endpoint, source }`，外层选用第一个有产出的结果写入 `result.source` 与 `runHistory.source`~~
+- ~~完成静态验证：`npm run backend:check` 与 `npm run build` 均已通过~~
+- 未完成事项：本轮受会话网络限制未做 WooCommerce / sitemap 在远端真实站点上的在线联调；纯前端渲染（SPA 列表页）站点未在 sitemap 暴露产品 URL 时仍无法采集
+
+## 2026-04-30 第 16 次整理：监控解析补强与 HTML 回退采集
+
+### 前端
+
+- 本次无新增页面改版：继续沿用现有任务中心、监控页与代理页交互
+
+### 后端
+
+- ~~`monitor-runtime` 已从"首个命中即采用"改为"多来源候选价格打分"策略：会同时汇总 JSON-LD、`__NEXT_DATA__`、常见标记与脚本内价格候选，并结合历史价格区间过滤明显异常值，降低 `1`、`0` 等误识别落库概率~~
+- ~~`task-runtime` 已补充 HTML 结构化数据回退链路：当 Shopify `products.json` 全部失败或为空时，会继续尝试从页面 `JSON-LD`、`__NEXT_DATA__` 与基础商品链接标记提取结果，作为首个非 Shopify 公开 JSON 的通用采集回退~~
+- ~~完成静态验证：`npm run backend:check` 与 `npm run build` 均已通过~~
+- ~~未完成事项：该 HTML 回退目前优先覆盖商品详情页与部分带结构化数据的页面，复杂纯前端渲染列表页仍需继续扩展~~（已在第 17 次扩展为 sitemap 通用采集器）
 
 ## 2026-04-30 第 15 次整理：代理探活真实化
 
@@ -60,7 +160,7 @@
 
 - ~~代理页“刷新探活”按钮已接入真实后端刷新接口，不再只是静态占位按钮~~
 - ~~`proxy` 页面与表格文案乱码已清理，保留在线 / 高延迟 / 离线与连续失败展示~~
-- 未完成事项：新增节点与导入代理入口仍未接入真实写入能力
+- ~~未完成事项：新增节点与导入代理入口仍未接入真实写入能力~~（新增节点已在第 17 次落地；批量导入仍未实现）
 
 ### 后端
 
@@ -74,7 +174,7 @@
 
 - ~~监控页“刷新监控”按钮已接入真实后端刷新接口，不再只是静态按钮~~
 - ~~`monitor` 页面与卡片文案乱码已清理，并保留错误态与空态展示~~
-- 未完成事项：新增站点入口仍未接入真实创建能力
+- ~~未完成事项：新增站点入口仍未接入真实创建能力~~（已在第 17 次落地）
 
 ### 后端
 
@@ -287,12 +387,15 @@
 
 ### 前端优先项
 
-- 清理剩余硬编码占位信息：例如侧边栏监控 badge、用户信息等仍是静态展示
-- 若继续保留 demo 模式，需要在 UI 上清楚区分“真实数据”和“演示数据”
+- ~~清理剩余硬编码占位信息：侧边栏 badge / 用户卡片~~（已在第 13 次整理处理）
+- ~~监控页”添加站点”、代理页”新增节点”接入真实写入接口~~（已在第 17 次整理处理）
+- 监控 / 代理批量导入入口仍未提供（CSV / 文本粘贴形式），目前只支持单条手工新增
+- 若继续保留 demo 模式，需要在 UI 上清楚区分”真实数据”和”演示数据”
 
 ### 后端优先项
 
-- 非 Shopify / 需 JS 渲染站点的真实采集执行器：当前仅支持公开 Shopify `products.json`
+- ~~非 Shopify 站点采集执行器~~（已扩展为 Shopify / WooCommerce / Sitemap / HTML 四段回退）
+- 复杂纯前端渲染（SPA 列表页）站点的真实采集仍未覆盖：依赖站点是否在 sitemap 中暴露产品 URL
 - 监控链路真实化：让 `monitor` 保存真实价格历史并支持异常判定
 - 代理探活真实化：让 `proxy` 具备真实健康检查、心跳和自动下线能力
 
@@ -323,15 +426,3 @@
 - ~~已完成事项~~
 - 未完成事项：说明
 ```
-## 2026-04-30 第 16 次整理：监控解析补强与 HTML 回退采集
-
-### 前端
-
-- 本次无新增页面改版：继续沿用现有任务中心、监控页与代理页交互
-
-### 后端
-
-- ~~`monitor-runtime` 已从“首个命中即采用”改为“多来源候选价格打分”策略：会同时汇总 JSON-LD、`__NEXT_DATA__`、常见标记与脚本内价格候选，并结合历史价格区间过滤明显异常值，降低 `1`、`0` 等误识别落库概率~~
-- ~~`task-runtime` 已补充 HTML 结构化数据回退链路：当 Shopify `products.json` 全部失败或为空时，会继续尝试从页面 `JSON-LD`、`__NEXT_DATA__` 与基础商品链接标记提取结果，作为首个非 Shopify 公开 JSON 的通用采集回退~~
-- ~~完成静态验证：`npm run backend:check` 与 `npm run build` 均已通过~~
-- 未完成事项：该 HTML 回退目前优先覆盖商品详情页与部分带结构化数据的页面，复杂纯前端渲染列表页仍需继续扩展

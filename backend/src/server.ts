@@ -1,6 +1,9 @@
+import './env-loader'
 import cors from '@fastify/cors'
+import rateLimit from '@fastify/rate-limit'
 import Fastify from 'fastify'
 import { backendConfig } from './config'
+import { closeDbConnections, getRedis, initDb } from './db/client'
 import { registerAnalyticsRoutes } from './routes/analytics'
 import { registerFieldRoutes } from './routes/fields'
 import { registerHealthRoutes } from './routes/health'
@@ -19,6 +22,21 @@ async function createServer() {
 
   await app.register(cors, {
     origin: backendConfig.corsOrigin === '*' ? true : backendConfig.corsOrigin,
+    credentials: true,
+  })
+
+  await app.register(rateLimit, {
+    max: backendConfig.rateLimit.global,
+    timeWindow: backendConfig.rateLimit.timeWindow,
+    redis: getRedis(),
+    nameSpace: 'scrapify-rl-',
+    keyGenerator: (request) => {
+      const forwarded = request.headers['x-forwarded-for']
+      if (typeof forwarded === 'string' && forwarded.length > 0) {
+        return forwarded.split(',')[0]?.trim() || request.ip
+      }
+      return request.ip
+    },
   })
 
   await registerHealthRoutes(app)
@@ -33,12 +51,34 @@ async function createServer() {
 }
 
 async function start() {
+  await initDb()
   await loadDatabase()
   startTaskWorker()
   startScheduleWorker()
   startMonitorWorker()
   startProxyWorker()
   const app = await createServer()
+
+  // 优雅关闭：让 PGlite 释放 postmaster.pid 锁，避免下次启动崩溃
+  let shuttingDown = false
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    app.log.info({ signal }, 'shutting down gracefully')
+    try {
+      await app.close()
+    } catch (error) {
+      app.log.error({ err: error }, 'error closing fastify')
+    }
+    try {
+      await closeDbConnections()
+    } catch (error) {
+      app.log.error({ err: error }, 'error closing db connections')
+    }
+    process.exit(0)
+  }
+  process.on('SIGINT', () => void shutdown('SIGINT'))
+  process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
   try {
     await app.listen({

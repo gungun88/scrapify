@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Providers } from '@/app/providers'
+import { AppShell } from '@/components/layout/AppShell'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Scrapify',
-  description: 'Shopify standalone site scraping task center',
+  description: '极简独立站采集工作台',
 }
 
 interface RootLayoutProps {
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="zh-CN">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   )

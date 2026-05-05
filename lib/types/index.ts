@@ -73,13 +73,6 @@ export interface FieldConfig {
   enabled: boolean
 }
 
-export interface StatCardData {
-  label: string
-  value: string
-  change: string
-  trend: 'up' | 'down' | 'neutral'
-}
-
 export interface NewTaskForm {
   url: string
   mode: 'full' | 'incremental' | 'price-only'
@@ -89,63 +82,56 @@ export interface NewTaskForm {
   delay: string
 }
 
-export interface ChartPoint {
-  date: string
-  count: number
-}
+/* ==================== 极简前端类型 ==================== */
 
-export interface AnalyticsHighlight {
+export type CollectMode = 'single' | 'catalog'
+
+/** 平台单项 */
+export interface PlatformOption {
+  id: string
   label: string
-  value: string
-  note: string
+  /** 选项色块（可选，仅展示） */
+  tone?: string
+  /** 品牌图标 slug（对应 simple-icons 或自定义注册表的 key） */
+  icon?: string
+  /** 品牌主色（#RRGGBB） */
+  brandColor?: string
 }
 
-export interface AnalyticsSnapshot {
-  stats: StatCardData[]
-  trend: ChartPoint[]
-  channels: Array<{
-    label: string
-    value: number
-    color?: 'default' | 'green' | 'amber'
-  }>
-  highlights: AnalyticsHighlight[]
-}
-
-export interface ScheduleJob {
+/** 平台分组 */
+export interface PlatformGroup {
   id: string
-  name: string
-  cron: string
-  cronLabel: string
-  lastRun: string
-  nextRun: string
-  enabled: boolean
-  taskTemplate: NewTaskForm
-  lastRunAt: string | null
-  nextRunAt: string | null
+  label: string
+  /** 副说明，仅"默认自动"那一项有 */
+  desc?: string
+  options: PlatformOption[]
 }
 
-export interface MonitorItem {
-  id: string
-  site: string
-  url: string
-  price: number
-  currency: string
-  change: number
-  status: 'up' | 'down' | 'stable' | 'outofstock'
-  history: number[]
-  lastCheckedAt: string | null
+/** 目录模式商品数上限：具体数字或 'all'（全部） */
+export type CatalogLimit = number | 'all'
+
+export interface UserPreferences {
+  /** 当前选中的平台 id（默认 'auto'） */
+  platform: string
+  /** 默认采集模式 */
+  defaultMode: CollectMode
+  /** 目录模式下默认的商品数上限（默认 100） */
+  catalogLimit: CatalogLimit
 }
 
-export interface ProxyItem {
+/** 一次"对话"——前端聚合，对应后端的若干 Task */
+export interface CollectConversation {
   id: string
-  ip: string
-  port: number
-  country: string
-  flag: string
-  latency: number
-  traffic: string
-  status: 'online' | 'slow' | 'offline'
-  lastCheckedAt: string | null
-  lastHeartbeatAt: string | null
-  consecutiveFailures: number
+  /** 标题，自动生成 */
+  title: string
+  mode: CollectMode
+  /** 采集时选中的平台 id */
+  platform: string
+  /** 目录模式下的商品数上限（仅 mode='catalog' 有效） */
+  catalogLimit?: CatalogLimit
+  /** 用户提交时输入的多行 URL */
+  urls: string[]
+  /** 关联的后端 task ids */
+  taskIds: string[]
+  createdAt: string
 }

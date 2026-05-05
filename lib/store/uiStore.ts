@@ -1,19 +1,15 @@
 import { create } from 'zustand'
 
 interface UIState {
-  isNewTaskModalOpen: boolean
-  selectedTaskId: string | null
-  openNewTaskModal: () => void
-  closeNewTaskModal: () => void
-  openTaskDetail: (taskId: string) => void
-  closeTaskDetail: () => void
+  isResultsOpen: boolean
+  openResults: () => void
+  closeResults: () => void
+  toggleResults: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  isNewTaskModalOpen: false,
-  selectedTaskId: null,
-  openNewTaskModal: () => set({ isNewTaskModalOpen: true }),
-  closeNewTaskModal: () => set({ isNewTaskModalOpen: false }),
-  openTaskDetail: (taskId) => set({ selectedTaskId: taskId }),
-  closeTaskDetail: () => set({ selectedTaskId: null }),
+  isResultsOpen: false,
+  openResults: () => set({ isResultsOpen: true }),
+  closeResults: () => set({ isResultsOpen: false }),
+  toggleResults: () => set((state) => ({ isResultsOpen: !state.isResultsOpen })),
 }))

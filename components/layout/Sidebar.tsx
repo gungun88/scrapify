@@ -1,131 +1,168 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { BarChart3, Clock3, Database, Globe, ListTodo, Radar, Rows3 } from 'lucide-react'
-import { useMonitor } from '@/hooks/useMonitor'
-import { useSchedule } from '@/hooks/useSchedule'
+import { usePathname, useRouter } from 'next/navigation'
+import { Plus, Settings, User, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { getConversations } from '@/lib/preferences'
+import type { CollectConversation } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-type NavItem = {
-  label: string
-  href: string
-  icon: typeof ListTodo
-  pulse?: boolean
-  badge?: string
+interface SidebarProps {
+  /** 触发刷新最近列表（提交新任务后自增） */
+  refreshKey?: number
 }
 
-type NavSection = {
-  label: string
-  items: NavItem[]
+const MAX_RECENT = 8
+
+function formatRelative(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return '刚刚'
+  if (m < 60) return `${m} 分钟前`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} 小时前`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d} 天前`
+  return new Date(iso).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
 }
 
-function buildNavSections(monitorBadge: string | null): NavSection[] {
-  return [
-    {
-      label: '采集',
-      items: [
-        { label: '任务中心', href: '/dashboard/tasks', icon: ListTodo, pulse: true },
-        { label: '调度计划', href: '/dashboard/schedule', icon: Clock3 },
-        { label: '字段配置', href: '/dashboard/fields', icon: Rows3 },
-      ],
-    },
-    {
-      label: '数据',
-      items: [
-        { label: '数据看板', href: '/dashboard/analytics', icon: BarChart3 },
-        { label: '价格监控', href: '/dashboard/monitor', icon: Radar, badge: monitorBadge ?? undefined },
-        { label: '代理管理', href: '/dashboard/proxy', icon: Globe },
-      ],
-    },
-  ]
-}
-
-export function Sidebar() {
+export function Sidebar({ refreshKey = 0 }: SidebarProps) {
   const pathname = usePathname()
-  const monitorQuery = useMonitor()
-  const scheduleQuery = useSchedule()
-  const monitorItems = monitorQuery.data ?? []
-  const scheduleJobs = scheduleQuery.data ?? []
-  const monitorAlertCount = monitorItems.filter((item) => item.status !== 'stable').length
-  const enabledScheduleCount = scheduleJobs.filter((job) => job.enabled).length
-  const navSections = buildNavSections(monitorAlertCount > 0 ? String(monitorAlertCount) : null)
+  const router = useRouter()
+  const [conversations, setConversations] = useState<CollectConversation[]>([])
+
+  useEffect(() => {
+    setConversations(getConversations())
+  }, [refreshKey, pathname])
+
+  const recent = conversations.slice(0, MAX_RECENT)
 
   return (
-    <aside className="z-10 flex h-full w-sidebar shrink-0 flex-col border-r border-border bg-surface">
-      <div className="flex items-center gap-[9px] border-b border-border px-[14px] py-[14px]">
-        <div className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-brand text-white">
-          <Database size={15} />
-        </div>
-        <div className="text-[15px] font-semibold text-text1">Scrapify</div>
-        <div className="ml-auto rounded-[5px] bg-brand-light px-[7px] py-[2px] text-[10px] font-semibold text-brand">
-          Local
-        </div>
+    <aside className="flex h-screen w-[240px] shrink-0 flex-col border-r border-line bg-surface">
+      {/* Logo */}
+      <div className="flex h-14 items-center px-4">
+        <Link href="/" className="flex items-center gap-2 text-[17px] font-semibold tracking-tight text-ink">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink text-[14px] font-bold text-accent-fg">
+            S
+          </span>
+          Scrapify
+        </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-[10px]">
-        {navSections.map((section) => (
-          <div key={section.label}>
-            <div className="px-2 pb-[5px] pt-[10px] text-[10px] font-semibold uppercase tracking-[0.06em] text-text3">
-              {section.label}
-            </div>
-            {section.items.map((item) => {
-              const isActive = pathname === item.href
-              const Icon = item.icon
+      {/* New */}
+      <div className="px-3">
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 py-2 text-[15px] font-medium text-ink transition-colors hover:bg-surface-soft"
+        >
+          <Plus size={14} strokeWidth={2.4} />
+          新建采集
+        </button>
+      </div>
 
+      {/* Recent */}
+      <nav className="mt-4 flex-1 overflow-y-auto px-2">
+        <div className="mb-1 px-2 text-[12.5px] font-semibold uppercase tracking-wider text-ink-subtle">
+          最近
+        </div>
+        {recent.length === 0 ? (
+          <div className="px-2 py-3 text-[14px] text-ink-subtle">还没有采集记录</div>
+        ) : (
+          <ul>
+            {recent.map((conv) => {
+              const active = pathname === `/c/${conv.id}`
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    'mb-[2px] flex items-center gap-[9px] rounded-sm px-[10px] py-2 text-[13px] font-medium text-text2 transition-colors hover:bg-surface2 hover:text-text1',
-                    isActive && 'bg-brand-light text-brand',
-                  )}
-                >
-                  <Icon size={15} />
-                  <span>{item.label}</span>
-                  {item.badge ? (
-                    <span className="ml-auto rounded-full bg-brand px-[6px] py-[1px] text-[10px] font-semibold text-white">
-                      {item.badge}
+                <li key={conv.id}>
+                  <Link
+                    href={`/c/${conv.id}`}
+                    className={cn(
+                      'group flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-[15px] transition-colors',
+                      active ? 'bg-surface-soft text-ink' : 'text-ink-muted hover:bg-surface-soft hover:text-ink',
+                    )}
+                  >
+                    <span className="truncate">{conv.title}</span>
+                    <span className="text-[12.5px] text-ink-subtle">
+                      {formatRelative(conv.createdAt)}
                     </span>
-                  ) : null}
-                  {item.pulse ? <span className="ml-auto h-[7px] w-[7px] rounded-full bg-green animate-pulse" /> : null}
-                </Link>
+                  </Link>
+                </li>
               )
             })}
-          </div>
-        ))}
+          </ul>
+        )}
+
+        {conversations.length > MAX_RECENT ? (
+          <Link
+            href="/records"
+            className="mt-2 block px-2 py-1.5 text-[14px] text-ink-muted transition-colors hover:text-ink"
+          >
+            ⋯ 全部记录
+          </Link>
+        ) : (
+          <Link
+            href="/records"
+            className="mt-2 block px-2 py-1.5 text-[14px] text-ink-muted transition-colors hover:text-ink"
+          >
+            采集记录 →
+          </Link>
+        )}
       </nav>
 
-      <div className="border-t border-border px-2 pb-[14px] pt-[10px]">
-        <div className="rounded-sm px-[10px] py-2 transition-colors hover:bg-surface2">
-          <div className="flex items-center gap-[9px]">
-            <div className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-brand text-[11px] font-semibold text-white">
-              运
-            </div>
-            <div>
-              <div className="text-[13px] font-medium text-text1">本地运行态</div>
-              <div className="text-[11px] text-text3">
-                {monitorQuery.isError || scheduleQuery.isError
-                  ? '等待接口恢复'
-                  : `${enabledScheduleCount} 条计划启用 · ${monitorItems.length} 个监控站点`}
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-text3">
-            <div className="rounded border border-border bg-surface2 px-2 py-2">
-              <div>监控告警</div>
-              <div className="mt-1 text-[13px] font-semibold text-text1">{monitorAlertCount}</div>
-            </div>
-            <div className="rounded border border-border bg-surface2 px-2 py-2">
-              <div>监控状态</div>
-              <div className="mt-1 text-[13px] font-semibold text-text1">
-                {monitorQuery.isLoading && monitorItems.length === 0 ? '加载中' : '已连接'}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Footer */}
+      <div className="border-t border-line p-3">
+        <Link
+          href="/me"
+          className={cn(
+            'flex items-center gap-2 rounded-md px-2 py-2 transition-colors',
+            pathname?.startsWith('/me')
+              ? 'bg-surface-soft text-ink'
+              : 'text-ink-muted hover:bg-surface-soft hover:text-ink',
+          )}
+        >
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ink text-[12.5px] font-semibold text-accent-fg">
+            <User size={12} />
+          </span>
+          <span className="flex-1 truncate text-[15px]">cooltest</span>
+          <Settings size={13} className="text-ink-subtle" />
+        </Link>
       </div>
     </aside>
+  )
+}
+
+/* 状态徽标，给后续详情页 / 列表页用 */
+export function StatusBadge({
+  status,
+}: {
+  status: 'running' | 'done' | 'error' | 'pending'
+}) {
+  if (status === 'running')
+    return (
+      <span className="inline-flex items-center gap-1 text-[14px] text-ink-muted">
+        <Loader2 size={12} className="animate-spin" />
+        运行中
+      </span>
+    )
+  if (status === 'done')
+    return (
+      <span className="inline-flex items-center gap-1 text-[14px] text-success">
+        <CheckCircle2 size={12} />
+        已完成
+      </span>
+    )
+  if (status === 'error')
+    return (
+      <span className="inline-flex items-center gap-1 text-[14px] text-danger">
+        <AlertCircle size={12} />
+        失败
+      </span>
+    )
+  return (
+    <span className="inline-flex items-center gap-1 text-[14px] text-ink-subtle">
+      <Clock size={12} />
+      等待中
+    </span>
   )
 }

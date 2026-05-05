@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+	<title>Xshoppy独立站Saas系统</title>
+	<link rel="stylesheet" href="./assets/css/index.css">
+	<script src="./assets/js/tailwindcss.js"></script>
+
+</head>
+
+<body>
+	<!-- header html -->
+	<div class="header">
+		<div class="section-screen">
+			<div class="nav-mobile md:hidden">
+				<div id="menuButton" class="nav-mobile-icon hover:cursor-pointer">
+					<svstg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+						roke="currentColor" class="w-6 h-6">
+						<path stroke-linecap="round" stroke-linejoin="round"
+							d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5" />
+						</svg>
+				</div>
+			</div>
+			<div class="logo hidden md:block"><img class="m-0" src="./assets/image/xlog.png" /></div>
+			<div class="nav flex-1 hidden md:block">
+				<ul class="list-none flex ">
+					<li class="px-3">
+						<a class="text-lg hover:underline hover:text-blue-600" href="/index.html">产品&服务</a>
+					</li>
+					<li class="px-3">
+						<a class="text-lg hover:underline hover:text-blue-600" href="/price.html">价格</a>
+					</li>
+				</ul>
+			</div>
+			<div class="oper flex justify-end">
+				<button
+					class="button blue whitespace-nowrap flex items-center justify-center box-border consultNow">立即咨询</button>
+			</div>
+		</div>
+	</div>
+	<!-- 侧边栏菜单 -->
+	<div class="md:hidden -translate-x-full bg-white w-full space-y-6 py-7 px-2 top-12 fixed z-20 inset-y-0 left-0 transform md:relative md:translate-x-0 transition-transform duration-200 ease-in-out"
+		id="menu">
+		<nav>
+			<a href="/" class="block py-2.5 px-4 rounded transition duration-200 hover:underline">产品&服务</a>
+			<a href="/price.html" class="block py-2.5 px-4 rounded transition duration-200 hover:underline">价格</a>
+		</nav>
+	</div>
+	<!-- header html -->
+
+	<!-- banner html -->
+	<div class="banner">
+		<div class="section-screen">
+			<div class="text animate__slideInLeft">
+				<div class="title">
+					快速创建跨境独立站<label></label>
+				</div>
+				<div class="title">
+					<label>省心开店, 直连全球</label>
+				</div>
+				<div class="describe">
+					<p>专属解决方案，满足各类客户需求</p>
+				</div>
+				<button class="button blue consultNow">立即咨询</button>
+			</div>
+			<div class="image animate__slideInRight">
+				<picture>
+					<source media="(max-width: 768px)" srcset="./assets/image/banner-wap-pop.png">
+					<img src="./assets/image/banner-pop.png">
+				</picture>
+				<!-- <img src="./assets/image/banner-pop.png" /> -->
+			</div>
+		</div>
+	</div>
+	<!-- banner html -->
+
+	<!-- intended for html -->
+
+	<div class="section-column white">
+		<div class="section-screen">
+			<h3 class="title">开通流程</h3>
+			<div class="section-grid">
+				<div class="section-grid-item">
+					<div class="image"><img src="./assets/image/sellers.png" /></div>
+					<div class="subtitle">申请开通</div>
+					<div class="describe">点击页面左上角,添加专属客户经理</div>
+				</div>
+				<div class="section-grid-item">
+					<div class="image"><img src="./assets/image/platform.png" /></div>
+					<div class="subtitle">开店需求</div>
+					<div class="describe">与客户经理，沟通开店需求或开店数量</div>
+				</div>
+				<div class="section-grid-item">
+					<div class="image"><img src="./assets/image/personalized.png" /></div>
+					<div class="subtitle">完成开店</div>
+					<div class="describe">客户经理授权店铺数量并给到帐号</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- intended for html -->
+
+	<!-- Quick experience html -->
+	<div class="section-column blue">
+		<div class="section-screen">
+			<h3 class="title white">立即体验，快速开启数字出海之旅</h3>
+			<div class="textAlign">
+				<button class="button blue2 marginTop consultNow">立即咨询</button>
+			</div>
+		</div>
+	</div>
+	<!-- Quick experience html -->
+	<!-- advantage html -->
+	<div class="section-column white">
+		<div class="section-screen">
+			<h3 class="title">为什么选择我们?</h3>
+			<div class="describe">
+				<p>我们能为您提供怎样的价值</p>
+			</div>
+			<div class="choice-flex">
+				<div class="choice-flex-item">
+					<div class="image right"><img src="./assets/image/safety.png" /></div>
+					<div class="text left">
+						<div class="subtitle">价格美丽</div>
+						<p class="describe"> 价格低于行业同类产品，无隐性支出，应用/模板等均无二次收费</p>
+
+					</div>
+				</div>
+				<div class="choice-flex-item">
+					<div class="image left"><img src="./assets/image/template.png" /></div>
+					<div class="text right">
+						<div class="subtitle">30+精品模板，轻松上手</div>
+						<p class="describe">30+精品店铺模板, 适配不同产品场景, 无需设计经验或编码要求, 轻松满足个性化定制需求, 打造符合你的品牌风格的网上商城。
+						</p>
+					</div>
+				</div>
+				<div class="choice-flex-item">
+					<div class="image right"><img src="./assets/image/service.png" /></div>
+					<div class="text left">
+						<div class="subtitle">专属客户服务群</div>
+						<p class="describe">专属客户服务群，用心做好服务</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!-- advantage html -->
+
+
+	<!-- intended for html -->
+	<div class="section-column dark">
+		<div class="section-screen">
+			<h3 class="title">模板市场</h3>
+			<div class="describe white">
+				<p>海量的应用&模板供您选择</p>
+				<!-- <p class="pc">用极致化的移动体验，打动每一个进站的消费者，让您的用户拥有流畅和愉悦的消费体验，获得不断提升的海外订单增长。</p>
+                <p class="wap">持续更新的海量免费建站模板与装修组件，
+                    帮您创建一个令海外用户心动的品牌网站。用极致化的移动体验，打动每一个进站的消费者，让您的用户拥有流畅和愉悦的消费体验，获得不断提升的海外订单增长。</p> -->
+			</div>
+			<div class="themes-grid">
+				<div class="themes-grid-item">
+					<div class="mask"></div>
+					<img src="./assets/image/themes/default.png" />
+				</div>
+				<div class="themes-grid-item">
+					<div class="mask"></div>
+					<img src="./assets/image/themes/brooklyn.png" />
+				</div>
+				<div class="themes-grid-item">
+					<div class="mask"></div>
+					<img src="./assets/image/themes/liquid.png" />
+				</div>
+				<div class="themes-grid-item">
+					<div class="mask"></div>
+					<img src="./assets/image/themes/envy.png" />
+				</div>
+				<div class="themes-grid-item">
+					<div class="mask"></div>
+					<img src="./assets/image/themes/christmas.png" />
+				</div>
+				<div class="themes-grid-item">
+					<div class="mask"></div>
+					<img src="./assets/image/themes/district.png" />
+				</div>
+
+				<!-- <div class="themes-grid-item">
+                <div class="mask"></div>
+                <img src="./assets/image/themes/pope.png" />
+            </div>
+            <div class="themes-grid-item">
+                <div class="mask"></div>
+                <img src="./assets/image/themes/dawn.png" />
+            </div>
+            <div class="themes-grid-item">
+                <div class="mask"></div>
+                <img src="./assets/image/themes/nikaia.png" />
+            </div> -->
+			</div>
+			<!-- <div class="textAlign">
+                <button class="button dark marginTop consultNow">立即咨询</button>
+            </div> -->
+		</div>
+	</div>
+	<!-- intended for html -->
+
+	<!-- Application market html -->
+	<div class="section-column application white">
+		<div class="section-screen">
+			<div class="choice-flex">
+				<div class="choice-flex-item" style="display: block;">
+					<div class="text right">
+						<div class="title">应用市场</div>
+						<p class="describe">多方位进行商品管理, 监测商品购买数据, 提供多种工具优化店铺访问情况。</p>
+						<!-- <button class="button marginTop consultNow">立即咨询</button> -->
+					</div>
+					<div class="image left"><img src="./assets/image/application.png" /></div>
+				</div>
+			</div>
+			<div class="application-grid">
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app01.png" /></div>
+					<div class="text">
+						<div class="subtitle">复制店铺</div>
+						<p class="describe">复制您的商品、评论、页面、物流设置及更多，更快的让您复制店铺，提高建站效率。
+
+						</p>
+					</div>
+				</div>
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app02.png" /></div>
+					<div class="text">
+						<div class="subtitle">快捷加购</div>
+						<p class="describe">在详情页中添加快捷加购按钮, 方便买家在下滑浏览的过程中加入该商品到购物车, 最终提高转化。</p>
+					</div>
+				</div>
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app03.png" /></div>
+					<div class="text">
+						<div class="subtitle">组合商品</div>
+						<p class="describe">当需要提高客单价或者为其他商品进行引流时, 可以在详情页中添加组合商品。</p>
+					</div>
+				</div>
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app04.png" /></div>
+					<div class="text">
+						<div class="subtitle">商品评论</div>
+						<p class="describe">可以为商品添加评论, 为买家提供购买后的反馈, 以提高商品的加购率。</p>
+					</div>
+				</div>
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app05.png" /></div>
+					<div class="text">
+						<div class="subtitle">促销倒计时</div>
+						<p class="describe">可以为详情页和结账页添加倒计时功能, 给买家营造一种紧迫感和稀缺感, 以降低加购和结账的放弃率。</p>
+					</div>
+				</div>
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app06.png" /></div>
+					<div class="text">
+						<div class="subtitle">运费险</div>
+						<p class="describe">帮助卖家收取额外费用, 同时可以增加买家的信任, 此功能在各大平台都有很好的表现。</p>
+					</div>
+				</div>
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app07.png" /></div>
+					<div class="text">
+						<div class="subtitle">推荐商品</div>
+						<p class="describe">随机推荐建议的商品, 使其展示在其他商品的详情页中, 以提高客单价和转化。</p>
+					</div>
+				</div>
+				<div class="application-grid-item">
+					<div class="image"><img src="./assets/image/app08.png" /></div>
+					<div class="text">
+						<div class="subtitle">最近购买记录</div>
+						<p class="describe">商品详情页每隔几秒展示店铺的历史顾客购买记录, 营造网站热卖的气氛, 促使顾客购买。</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!-- Application market html -->
+
+	<!-- cooperative partner html -->
+	<div class="section-column grey">
+		<div class="section-screen">
+			<div class="title">
+				合作伙伴
+			</div>
+			<div class="partner-grid">
+				<div class="partner-grid-item"><img src="./assets/image/facebook.svg" /></div>
+				<div class="partner-grid-item"><img src="./assets/image/google.svg" /></div>
+				<div class="partner-grid-item"><img src="./assets/image/tiktok.svg" /></div>
+				<div class="partner-grid-item"><img src="./assets/image/paypal.svg" /></div>
+				<div class="partner-grid-item"><img src="./assets/image/aliyun.svg" /></div>
+				<div class="partner-grid-item"><img src="./assets/image/asiaBill.svg" /></div>
+				<div class="partner-grid-item"><img src="./assets/image/dianxiaomi.svg" /></div>
+				<div class="partner-grid-item"><img src="./assets/image/maban.svg" /></div>
+			</div>
+		</div>
+	</div>
+	<!-- cooperative partner html -->
+
+	<!-- footer html -->
+	<div class="footer">
+		<div class="section-screen">
+			<p><a href="https://beian.miit.gov.cn">粤ICP备2021022326号</a></p>
+			<p>深圳市世畅科技有限责任公司</p>
+		</div>
+	</div>
+	<!-- footer html -->
+
+	<!-- customer html -->
+	<div class="customer-fixed">
+		<div class="webchat">
+			<img src="./assets/image/wechat.svg" />
+			<p>微信咨询</p>
+			<div class="tips">
+				<p class="describe">扫码添加</p>
+				<p class="describe">微信号: Melody</p>
+				<img src="./assets/image/webchat.jpg" />
+			</div>
+		</div>
+		<div class="iphone ">
+			<img src="./assets/image/phone.svg" />
+			<p>电话咨询</p>
+			<div class="tips tips-flex">
+				<div class="image"><img src="./assets/image/phone.png" /></div>
+				<div class="text">
+					<a href="tel:13316414706">13316414706</a>
+					<!-- <p>联系电话</p> -->
+					<!-- <span></span> -->
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="customer-mask"></div>
+	<div class="customer-pop">
+		<span class="close"></span>
+		<div class="customer-header">
+			<div class="image"><img src="./assets/image/customer01.png" /></div>
+			<div class="text">
+				<p>快速创建跨境独立站</p>
+				<p>直链全球消费者</p>
+			</div>
+		</div>
+		<img src="./assets/image/webchat.jpg" />
+		<div class="contact">
+			<div class="contact-item">
+				<img src="./assets/image/webchat.png" />
+				<spn>微信号： Melody</spn>
+			</div>
+			<div class="contact-item">
+				<img src="./assets/image/phone.png" />
+				<a href="tel:13316414706">13316414706</a>
+			</div>
+		</div>
+	</div>
+	<!-- customer html -->
+	<div class="contact-form-mask fixed w-full h-full bg-black top-0 left-0 z-10 opacity-60 hidden"></div>
+	<div class="contact-form-container fixed top-0 left-0 z-20 w-full h-full flex justify-center items-center hidden">
+		<div class="contact-form-box relative w-full max-h-[96%] m-6 bg-white p-6 rounded-md shadow-xl md:w-[640px]">
+			<div class="contact-form-close absolute right-3 top-3 hover:cursor-pointer">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+					stroke="currentColor" class="w-6 h-6">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</div>
+			<div class="contact-header mb-8">
+				<div class="text-2xl mb-2 mt-[-12px]">Contact Us.</div>
+				<div class="text-base text-gray-600">Give us some info so the right person can get back to you.</div>
+			</div>
+			<form name="contact-form" class="contact-form overflow-auto">
+				<div class="grid grid-cols-1 gap-4 gap-y-3 md:grid-cols-2">
+					<div class="form-item">
+						<label class="block text-sm font-medium leading-6 text-gray-900;">First name</label>
+						<input type="text" name="first_name" placeholder="First name"
+							class="J-Value block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6" />
+						<p class="form-error text-red-500 text-sm mt-1 hidden">Enter your first name</p>
+					</div>
+					<div class="form-item">
+						<label class="block text-sm font-medium leading-6 text-gray-900;">Last name</label>
+						<input type="text" name="last_name" placeholder="Last name"
+							class="J-Value block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6" />
+						<p class="form-error text-red-500 text-sm mt-1 hidden">Enter your last name</p>
+					</div>
+					<div class="form-item">
+						<label class="block text-sm font-medium leading-6 text-gray-900;">Email</label>
+						<input type="email" name="email" placeholder="Email"
+							class="J-Value block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6" />
+						<p class="form-error text-red-500 text-sm mt-1 hidden">Enter a valid email address</p>
+					</div>
+					<div class="form-item">
+						<label class="block text-sm font-medium leading-6 text-gray-900;">Phone</label>
+						<input type="text" name="phone" placeholder="Phone"
+							class="J-Value block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6" />
+						<p class="form-error text-red-500 text-sm mt-1 hidden">Enter a valid phone number</p>
+					</div>
+					<div class="form-item">
+						<label class="block text-sm font-medium leading-6 text-gray-900;">Company</label>
+						<input type="text" name="company" placeholder="Company"
+							class="J-Value block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6" />
+					</div>
+					<div class="form-item">
+						<label class="block text-sm font-medium leading-6 text-gray-900;">Country/Region</label>
+						<select name="country"
+							class="J-Value block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
+							name="country"
+							class="w-full py-2 px-2 rounded-md text-gray-400 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm">
+							<option disabled="" label="Country/Region" selected="" value="">Country/Region</option>
+							<option value="US">United States</option>
+							<option value="AF">Afghanistan</option>
+							<option value="AL">Albania</option>
+							<option value="DZ">Algeria</option>
+							<option value="AS">American Samoa</option>
+							<option value="AD">Andorra</option>
+							<option value="AI">Anguilla</option>
+							<option value="AQ">Antarctica</option>
+							<option value="AG">Antigua And Barbuda</option>
+							<option value="AR">Argentina</option>
+							<option value="AM">Armenia</option>
+							<option value="AW">Aruba</option>
+							<option value="AU">Australia</option>
+							<option value="AT">Austria</option>
+							<option value="AZ">Ayerbaijan</option>
+							<option value="BS">Bahamas, The</option>
+							<option value="BH">Bahrain</option>
+							<option value="BD">Bangladesh</option>
+							<option value="BB">Barbados</option>
+							<option value="BY">Belarus</option>
+							<option value="BZ">Belize</option>
+							<option value="BE">Belgium</option>
+							<option value="BJ">Benin</option>
+							<option value="BM">Bermuda</option>
+							<option value="BT">Bhutan</option>
+							<option value="BO">Bolivia</option>
+							<option value="BV">Bouvet Is</option>
+							<option value="BA">Bosnia and Herzegovina</option>
+							<option value="BW">Botswana</option>
+							<option value="BR">Brazil</option>
+							<option value="IO">British Indian Ocean Territory</option>
+							<option value="BN">Brunei</option>
+							<option value="BG">Bulgaria</option>
+							<option value="BF">Burkina Faso</option>
+							<option value="BI">Burundi</option>
+							<option value="KH">Cambodia</option>
+							<option value="CM">Cameroon</option>
+							<option value="CA">Canada</option>
+							<option value="CV">Cape Verde</option>
+							<option value="KY">Cayman Is</option>
+							<option value="CF">Central African Republic</option>
+							<option value="TD">Chad</option>
+							<option value="CL">Chile</option>
+							<option value="CN">China</option>
+							<option value="HK">Hong Kong</option>
+							<option value="MO">Macau</option>
+							<option value="CX">Christmas Is</option>
+							<option value="CC">Cocos (Keeling) Is</option>
+							<option value="CO">Colombia</option>
+							<option value="KM">Comoros</option>
+							<option value="CK">Cook Islands</option>
+							<option value="CR">Costa Rica</option>
+							<option value="CI">Cote D'Ivoire (Ivory Coast)</option>
+							<option value="HR">Croatia (Hrvatska)</option>
+							<option value="CY">Cyprus</option>
+							<option value="CZ">Czech Republic</option>
+							<option value="CD">Democratic Republic of the Congo</option>
+							<option value="DK">Denmark</option>
+							<option value="DM">Dominica</option>
+							<option value="DO">Dominican Republic</option>
+							<option value="DJ">Djibouti</option>
+							<option value="EC">Ecuador</option>
+							<option value="EG">Egypt</option>
+							<option value="SV">El Salvador</option>
+							<option value="GQ">Equatorial Guinea</option>
+							<option value="ER">Eritrea</option>
+							<option value="EE">Estonia</option>
+							<option value="ET">Ethiopia</option>
+							<option value="FK">Falkland Is (Is Malvinas)</option>
+							<option value="FO">Faroe Islands</option>
+							<option value="FJ">Fiji Islands</option>
+							<option value="FI">Finland</option>
+							<option value="FR">France</option>
+							<option value="GF">French Guiana</option>
+							<option value="PF">French Polynesia</option>
+							<option value="TF">French Southern Territories</option>
+							<option value="MK">F.Y.R.O. Macedonia</option>
+							<option value="GA">Gabon</option>
+							<option value="GM">Gambia, The</option>
+							<option value="GE">Georgia</option>
+							<option value="DE">Germany</option>
+							<option value="GH">Ghana</option>
+							<option value="GI">Gibraltar</option>
+							<option value="GR">Greece</option>
+							<option value="GL">Greenland</option>
+							<option value="GD">Grenada</option>
+							<option value="GP">Guadeloupe</option>
+							<option value="GU">Guam</option>
+							<option value="GT">Guatemala</option>
+							<option value="GN">Guinea</option>
+							<option value="GW">Guinea-Bissau</option>
+							<option value="GY">Guyana</option>
+							<option value="HT">Haiti</option>
+							<option value="HM">Heard and McDonald Is</option>
+							<option value="HN">Honduras</option>
+							<option value="HU">Hungary</option>
+							<option value="IS">Iceland</option>
+							<option value="IN">India</option>
+							<option value="ID">Indonesia</option>
+							<option value="IE">Ireland</option>
+							<option value="IL">Israel</option>
+							<option value="IT">Italy</option>
+							<option value="JM">Jamaica</option>
+							<option value="JP">Japan</option>
+							<option value="JO">Jordan</option>
+							<option value="KZ">Kayakhstan</option>
+							<option value="KE">Kenya</option>
+							<option value="KI">Kiribati</option>
+							<option value="KR">Korea, South</option>
+							<option value="KW">Kuwait</option>
+							<option value="KG">Kyrgyzstan</option>
+							<option value="LA">Laos</option>
+							<option value="LV">Latvia</option>
+							<option value="LB">Lebanon</option>
+							<option value="LS">Lesotho</option>
+							<option value="LR">Liberia</option>
+							<option value="LI">Liechtenstein</option>
+							<option value="LT">Lithuania</option>
+							<option value="LU">Luxembourg</option>
+							<option value="MG">Madagascar</option>
+							<option value="MW">Malawi</option>
+							<option value="MY">Malaysia</option>
+							<option value="MV">Maldives</option>
+							<option value="ML">Mali</option>
+							<option value="MT">Malta</option>
+							<option value="MH">Marshall Is</option>
+							<option value="MR">Mauritania</option>
+							<option value="MU">Mauritius</option>
+							<option value="MQ">Martinique</option>
+							<option value="YT">Mayotte</option>
+							<option value="MX">Mexico</option>
+							<option value="FM">Micronesia</option>
+							<option value="MD">Moldova</option>
+							<option value="MC">Monaco</option>
+							<option value="MN">Mongolia</option>
+							<option value="MS">Montserrat</option>
+							<option value="MA">Morocco</option>
+							<option value="MZ">Mozambique</option>
+							<option value="MM">Myanmar</option>
+							<option value="NA">Namibia</option>
+							<option value="NR">Nauru</option>
+							<option value="NP">Nepal</option>
+							<option value="NL">Netherlands, The</option>
+							<option value="AN">Netherlands Antilles</option>
+							<option value="NC">New Caledonia</option>
+							<option value="NZ">New Zealand</option>
+							<option value="NI">Nicaragua</option>
+							<option value="NE">Niger</option>
+							<option value="NG">Nigeria</option>
+							<option value="NU">Niue</option>
+							<option value="NO">Norway</option>
+							<option value="NF">Norfolk Island</option>
+							<option value="MP">Northern Mariana Is</option>
+							<option value="OM">Oman</option>
+							<option value="PK">Pakistan</option>
+							<option value="PW">Palau</option>
+							<option value="PA">Panama</option>
+							<option value="PG">Papua new Guinea</option>
+							<option value="PY">Paraguay</option>
+							<option value="PE">Peru</option>
+							<option value="PH">Philippines</option>
+							<option value="PN">Pitcairn Island</option>
+							<option value="PL">Poland</option>
+							<option value="PT">Portugal</option>
+							<option value="PR">Puerto Rico</option>
+							<option value="QA">Qatar</option>
+							<option value="CG">Republic of the Congo</option>
+							<option value="RE">Reunion</option>
+							<option value="RO">Romania</option>
+							<option value="RU">Russia</option>
+							<option value="RW">Rwanda</option>
+							<option value="SH">Saint Helena</option>
+							<option value="KN">Saint Kitts And Nevis</option>
+							<option value="LC">Saint Lucia</option>
+							<option value="PM">Saint Pierre and Miquelon</option>
+							<option value="VC">Saint Vincent And The Grenadines</option>
+							<option value="WS">Samoa</option>
+							<option value="SM">San Marino</option>
+							<option value="ST">Sao Tome and Principe</option>
+							<option value="SA">Saudi Arabia</option>
+							<option value="SN">Senegal</option>
+							<option value="rs">Serbia</option>
+							<option value="SC">Seychelles</option>
+							<option value="SL">Sierra Leone</option>
+							<option value="SG">Singapore</option>
+							<option value="SK">Slovakia</option>
+							<option value="SI">Slovenia</option>
+							<option value="SB">Solomon Islands</option>
+							<option value="SO">Somalia</option>
+							<option value="ZA">South Africa</option>
+							<option value="GS">South Georgia &amp; The S. Sandwich Is</option>
+							<option value="ES">Spain</option>
+							<option value="LK">Sri Lanka</option>
+							<option value="SR">Suriname</option>
+							<option value="SJ">Svalbard And Jan Mayen Is</option>
+							<option value="SZ">Swaziland</option>
+							<option value="SE">Sweden</option>
+							<option value="CH">Switzerland</option>
+							<option value="TW">Taiwan</option>
+							<option value="TJ">Tajikistan</option>
+							<option value="TZ">Tanzania</option>
+							<option value="TH">Thailand</option>
+							<option value="TL">Timor-Leste</option>
+							<option value="TG">Togo</option>
+							<option value="TK">Tokelau</option>
+							<option value="TO">Tonga</option>
+							<option value="TT">Trinidad And Tobago</option>
+							<option value="TN">Tunisia</option>
+							<option value="TR">Türkiye</option>
+							<option value="TC">Turks And Caicos Is</option>
+							<option value="TM">Turkmenistan</option>
+							<option value="TV">Tuvalu</option>
+							<option value="UG">Uganda</option>
+							<option value="UA">Ukraine</option>
+							<option value="AE">United Arab Emirates</option>
+							<option value="GB">United Kingdom</option>
+							<option value="UM">United States Minor Outlying Is</option>
+							<option value="UY">Uruguay</option>
+							<option value="UZ">Uzbekistan</option>
+							<option value="VU">Vanuatu</option>
+							<option value="VA">Vatican City State (Holy See)</option>
+							<option value="VE">Venezuela</option>
+							<option value="VN">Vietnam</option>
+							<option value="VG">Virgin Islands (British)</option>
+							<option value="VI">Virgin Islands (US)</option>
+							<option value="WF">Wallis And Futuna Islands</option>
+							<option value="EH">Western Sahara</option>
+							<option value="YE">Yemen</option>
+							<option value="ZM">Zambia</option>
+							<option value="ZW">Zimbabwe</option>
+						</select>
+						<p class="form-error text-red-500 text-sm mt-1 hidden">Select country</p>
+					</div>
+					<div class="form-item md:col-span-2">
+						<textarea name="comments" placeholder="Questions/Comments"
+							class="J-Value block w-full rounded-md border-0 px-3.5 py-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"></textarea>
+					</div>
+				</div>
+			</form>
+			<div class="mt-8 text-right">
+				<button class="button blue J-Contact-Submit-Btn">Contact Me</button>
+			</div>
+		</div>
+	</div>
+
+	<div
+		class="msg-box max-w-[220px] fixed top-10 left-1/2 z-30 bg-green-200 text-green-600 p-3 rounded mb-4 flex justify-center items-center hidden">
+
+	</div>
+	<!-- Messenger 聊天插件 Code -->
+	<div id="fb-root"></div>
+
+	<!-- Your 聊天插件 code -->
+	<!-- <div id="fb-customer-chat" class="fb-customerchat">
+    </div> -->
+	<script src="./assets/js/jquery.js"></script>
+	<script src="./assets/js/index.js"></script>
+</body>
+
+</html>
