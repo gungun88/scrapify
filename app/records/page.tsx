@@ -112,12 +112,12 @@ export default function RecordsPage() {
               <div className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-ink-subtle">
                 {bucket}
               </div>
-              <ul className="space-y-px">
+              <ul className="space-y-2">
                 {list.map(({ conv, status, totalItems }) => (
                   <li key={conv.id}>
                     <Link
                       href={`/c/${conv.id}`}
-                      className="block rounded-md px-4 py-3 transition-colors hover:bg-surface-soft"
+                      className="block rounded-md border border-line bg-[#ededed] px-4 py-3 transition-colors hover:border-line-strong hover:bg-[#e2e2e2]"
                     >
                       <div className="flex items-center gap-3">
                         <span

@@ -18,10 +18,10 @@
 
 - ~~Next.js 14 App Router + Tailwind 项目骨架~~
 - ~~首页 `app/page.tsx`：中央 Composer + 最近常用 chips~~
-- ~~会话详情 `app/c/[id]/page.tsx`：用户气泡 + 助手气泡（任务列表 + CSV 导出）+ 嵌入式 Composer 续采~~
+- ~~会话详情 `app/c/[id]/page.tsx`：顶部摘要（标题 + 状态徽章 + 时间/平台/链接数/件数 meta）+ 折叠式"查看提交的链接"+ 任务列表（与 `/records` 风格统一，每行带 CSV 导出）~~
 - ~~采集记录 `app/records/page.tsx`：按时间分桶 + 关键字 / 状态筛选~~
 - ~~个人中心 `app/me/page.tsx`：账户 / 默认偏好 / 字段模板 / 使用统计 4 个 tab~~
-- ~~Composer 组件：单品 / 目录两种模式、多行 URL 校验、平台选择器（含品牌图标）、目录商品数选择器、⌘/Ctrl+Enter 提交~~
+- ~~Composer 组件：单品 / 目录两种模式、多行 URL 校验 + 模式不匹配软提示（一键切换模式）、平台选择器（含品牌图标）、目录商品数选择器、⌘/Ctrl+Enter 提交~~
 - ~~AppShell + Sidebar：左侧最近会话列表 + 全部记录入口 + 个人入口；提交后通过 Context 触发 Sidebar 刷新~~
 - ~~偏好与会话记录持久层：`lib/preferences.ts` 写 localStorage~~
 - ~~前端 API 代理：仅保留 `app/api/tasks/*` 与 `app/api/fields`~~
@@ -58,6 +58,52 @@
 ---
 
 ## 2. 开发记录
+
+## 2026-05-07 第 23 次整理：Composer 加 URL 类型识别 + 模式不匹配软提示
+
+> 单品模式下用户粘了 `/collections/...` 链接（或目录模式下粘了 `/products/...`）会跑不出结果，体验是"提交了但抓不到"。本次改成提交前检测、给出软提示 + 一键切换模式，避免用户带着错配模式进队列。
+
+### 前端
+
+- ~~`components/composer/Composer.tsx` 新增 `detectUrlMode(url)` helper：路径含 `/products/<slug>` → `single`，含 `/collections(/|$)` → `catalog`，其他一律 `unknown`~~
+- ~~检测顺序刻意先 `/products/<slug>` 后 `/collections`，所以 `/collections/<slug>/products/<id>` 这种带集合前缀的商品详情页会被正确识别为 `single` 而不是 `catalog`~~
+- ~~新增 `mismatchedCount` useMemo：只统计「会被实际提交」的那部分（catalog 模式下只看第 1 行，其他行本来就会被 `effectiveUrls` 忽略）；`unknown` 一律放行不计入冲突~~
+- ~~`</form>` 与现有 hint 行之间插入软提示 banner：浅黄色卡片（border `#f0c75a/60` + bg `#fff8d8`，inline 颜色不污染 tailwind 颜色 token），文案"检测到 N 行是目录/单品链接，不匹配当前模式"+ 一键切换模式的药丸按钮~~
+- ~~策略：软提示而非硬阻断——提交按钮不禁用，用户可以选择改 URL、点切换、或者直接强行提交（裸域名 / 自定义路由这类 `unknown` 场景下用户往往知道自己在干什么）~~
+- 未完成事项：检测规则只覆盖 Shopify-like 路径模式；WooCommerce 的 `/product/<slug>` / `/product-category/<slug>`、Magento、自建商城都会被归到 `unknown` 不报错，但实际跑到 task-runtime 的 sitemap-html / html-fallback 阶段命中率仍不稳定，体验上对用户依旧是"提交后看运气"
+- 未完成事项：混合输入时（比如单品模式下贴 3 行 `/products/...` + 1 行 `/collections/...`）提示只说"1 行不匹配"，不会标出具体哪一行；如要做行级高亮需要把 textarea 换成更复杂的编辑器组件，工作量大，暂不做
+
+### 验证
+
+- ~~`npx tsc --noEmit -p tsconfig.json` 通过~~
+- 未完成事项：未在浏览器里走查 4 种场景（单品框贴目录、目录框贴单品、混合输入、unknown 类型放行）；HMR 已加载新 Composer，刷新后即可测
+
+## 2026-05-07 第 22 次整理：会话详情页从对话框风格改回任务列表风格
+
+> 第 20 次整理把 `/c/[id]` 做成 ChatGPT 风格（用户气泡 + 助手气泡 + 嵌入 Composer），实测使用时反馈"对话框形式"不直观——单次提交后只关心进度和导出，左右气泡的视觉重量与功能不匹配。本次把详情页风格统一到 `/records` 列表风格。
+
+### 前端
+
+- ~~`app/c/[id]/page.tsx` 重写：去掉 `UserBubble` / `AssistantBubble` / `StatusDot` 三个子组件、去掉底部嵌入式 `<Composer />`~~
+- ~~顶部 header 整合：标题 + 状态徽章 + 运行中进度计数（N/total）一行；下方 meta 行一栏列出"时间 · 平台 · 商品数 · 共 N 个链接 · 件数 · 耗时（完成时）"~~
+- ~~原"用户气泡"里的链接列表改为顶部「查看提交的链接 ▾」折叠按钮，默认收起，点击展开（`showUrls` 本地 state）~~
+- ~~任务列表改为 `/records` 风格的圆角行：状态点 + URL（mono 截断）+ StatusBadge + CSV 导出按钮（仅 done 时）+ 副标题 meta（进度/件数/耗时）；行不可点击但 hover 变色，与 records 行视觉一致~~
+- ~~容器从 `max-w-[820px] flex-col gap-6 px-6 py-6` 调整为 `max-w-[820px] px-6 py-8` 与 `/records` 一致~~
+- ~~原底部"✓ 全部完成 · N 件 · 总耗时 X · 刷新"提示条整体并入顶部 meta 行；轮询自动刷新（`useTasksByIds` 3 秒），不再需要手动 reload 按钮~~
+- ~~`lucide-react` import 调整：去掉 `RotateCw`，新增 `ChevronDown`；`Composer` import 整段移除~~
+- 未完成事项：用户在当前会话内追加新 URL 的入口被去掉了——只能回首页或点 Sidebar 的"新建采集"。`CollectConversation` 模型本身就是"一次提交的快照"，不支持续写；如果未来需要"在同一会话内追加"，要么把会话改成可追加的多轮模型，要么从 `/c/[id]` 顶部加"再次采集（带预填）"跳回首页
+
+### 验证
+
+- ~~`npx tsc --noEmit -p tsconfig.json` 通过~~
+- ~~前后端链路打通：`/api/tasks` 200/9ms、`/api/fields` 200/11ms~~
+- 未完成事项：未在 `npm run build` 产物上验证；UI 行为也未在浏览器里全状态走查（pending / running / done / error 四种行的渲染）
+
+### 运维（本次顺手解决）
+
+- ~~`.env` 把 `SCRAPIFY_BACKEND_BASE_URL` 从 `http://localhost:8787` 改为 `http://127.0.0.1:8787`：规避 Windows + Node 18+ 的 `localhost` 优先解析为 IPv6（`::1`）而后端只监听 IPv4 导致前端代理 5 分钟超时的问题~~
+- ~~排查发现"字段配置仍在加载，请稍候"的根因是 `useFields()` 一直 `isLoading=true`——前端代理对后端的请求挂在 IPv6 解析里超时；现场 8787 上还存活着一个僵死的 backend 进程（PID 5596，不响应连接但占着端口），同时新启动的 backend 报 `EADDRINUSE` 直接退出。`taskkill //F //PID 5596` + `npm run backend:dev` 重启后恢复~~
+- 未完成事项：worker 每个 tick / 每页 fetch 都 `await saveDatabase()`，PGlite 单连接 + truncate-insert 全表写，长期是后端僵死的设计层面瓶颈；短期靠重启缓解，长期建议把 `saveDatabase` 节流（500ms 内合并）或 task payload 改用 UPDATE 单行而不是 truncate 全表
 
 ## 2026-05-06 第 21 次整理：下线 schedule / monitor / proxy / analytics 4 套悬空模块
 

@@ -1,13 +1,12 @@
 'use client'
 
-import { ArrowLeft, Download, RotateCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Download, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { Composer } from '@/components/composer/Composer'
 import { StatusBadge } from '@/components/layout/Sidebar'
 import { useTasksByIds } from '@/hooks/useTasksByIds'
-import { getPlatformBreadcrumb, formatCatalogLimit } from '@/lib/mock/platforms'
+import { formatCatalogLimit, getPlatformBreadcrumb } from '@/lib/mock/platforms'
 import { deleteConversation, getConversation } from '@/lib/preferences'
 import { downloadTaskResultExport } from '@/lib/taskExport'
 import type { CollectConversation, Task } from '@/lib/types'
@@ -19,6 +18,7 @@ export default function ConversationPage() {
   const [conv, setConv] = useState<CollectConversation | null>(null)
   const [exportingTaskId, setExportingTaskId] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [showUrls, setShowUrls] = useState(false)
 
   useEffect(() => {
     if (!params?.id) return
@@ -67,13 +67,21 @@ export default function ConversationPage() {
     router.replace('/')
   }
 
+  const platformLabel = getPlatformBreadcrumb(conv.platform)
+  const createdAtLabel = new Date(conv.createdAt).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
   return (
-    <div className="mx-auto flex w-full max-w-[820px] flex-col gap-6 px-6 py-6">
+    <div className="mx-auto w-full max-w-[820px] px-6 py-8">
       {/* 顶部 */}
-      <header className="flex items-center gap-3">
+      <header className="mb-5 flex items-start gap-3">
         <Link
           href="/"
-          className="flex h-8 w-8 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink"
+          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink"
           aria-label="返回"
         >
           <ArrowLeft size={15} />
@@ -82,21 +90,38 @@ export default function ConversationPage() {
           <div className="flex items-center gap-2 text-[17px] font-semibold text-ink">
             <span className="truncate">{conv.title}</span>
             <StatusBadge status={overall.status} />
+            {overall.status === 'running' ? (
+              <span className="text-[14px] text-ink-muted">
+                {overall.doneCount}/{tasks.length}
+              </span>
+            ) : null}
           </div>
-          <div className="mt-0.5 text-[13.5px] text-ink-subtle">
-            {new Date(conv.createdAt).toLocaleString('zh-CN', {
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}{' '}
-            · 共 {conv.urls.length} 个链接
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] text-ink-subtle">
+            <span>{createdAtLabel}</span>
+            <span>·</span>
+            <span>{platformLabel}</span>
+            {conv.mode === 'catalog' && conv.catalogLimit !== undefined ? (
+              <>
+                <span>·</span>
+                <span>商品数 {formatCatalogLimit(conv.catalogLimit)}</span>
+              </>
+            ) : null}
+            <span>·</span>
+            <span>共 {conv.urls.length} 个链接</span>
+            {overall.status === 'done' && overall.totalItems > 0 ? (
+              <>
+                <span>·</span>
+                <span>
+                  {overall.totalItems.toLocaleString('en-US')} 件 · 耗时 {overall.totalElapsed}
+                </span>
+              </>
+            ) : null}
           </div>
         </div>
         <button
           type="button"
           onClick={handleDelete}
-          className="flex h-8 w-8 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-soft hover:text-danger"
+          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-soft hover:text-danger"
           title="删除会话记录"
           aria-label="删除"
         >
@@ -104,109 +129,59 @@ export default function ConversationPage() {
         </button>
       </header>
 
-      {/* 用户气泡 */}
-      <UserBubble conv={conv} />
-
-      {/* 助手气泡 */}
-      <AssistantBubble
-        conv={conv}
-        tasks={tasks}
-        overall={overall}
-        exportingTaskId={exportingTaskId}
-        onExport={handleExport}
-      />
-
-      {exportError ? (
-        <div className="rounded-md border border-danger/30 bg-[#fff4f4] px-3 py-2 text-[14px] text-danger">
-          {exportError}
-        </div>
-      ) : null}
-
-      {/* 追加输入 */}
-      <div className="mt-6">
-        <div className="mb-2 text-[13.5px] font-medium uppercase tracking-wider text-ink-subtle">
-          继续采集
-        </div>
-        <Composer embedded />
+      {/* 提交链接（折叠） */}
+      <div className="mb-6 pl-11">
+        <button
+          type="button"
+          onClick={() => setShowUrls((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-[13.5px] text-ink-muted transition-colors hover:text-ink"
+        >
+          <ChevronDown
+            size={12}
+            className={cn('transition-transform', showUrls ? 'rotate-180' : '')}
+          />
+          {showUrls ? '收起提交的链接' : '查看提交的链接'}
+        </button>
+        {showUrls ? (
+          <ul className="mt-2 space-y-1 rounded-md border border-line bg-surface-soft px-4 py-3">
+            {conv.urls.map((u, i) => (
+              <li key={i} className="break-all font-mono text-[13.5px] text-ink-muted">
+                {u}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
-    </div>
-  )
-}
 
-/* ===================== 子组件 ===================== */
-
-function UserBubble({ conv }: { conv: CollectConversation }) {
-  return (
-    <div className="flex justify-end">
-      <div className="max-w-[80%] rounded-2xl rounded-tr-md border border-line bg-surface-soft px-4 py-3">
-        <div className="mb-2 text-[14px] text-ink-muted">
-          {conv.mode === 'catalog' ? '抓取目录页' : `抓取 ${conv.urls.length} 个商品`}
-        </div>
-        <ul className="space-y-1">
-          {conv.urls.map((u, i) => (
-            <li key={i} className="break-all font-mono text-[14px] text-ink">
-              {u}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-2 border-t border-line pt-2 text-[13.5px] text-ink-subtle">
-          平台: {getPlatformBreadcrumb(conv.platform)}
-          {conv.mode === 'catalog' && conv.catalogLimit !== undefined
-            ? ` · 商品数: ${formatCatalogLimit(conv.catalogLimit)}`
-            : null}
-        </div>
+      {/* 任务列表 */}
+      <div className="mb-2 px-2 text-[13px] font-semibold uppercase tracking-wider text-ink-subtle">
+        任务
       </div>
-    </div>
-  )
-}
-
-function AssistantBubble({
-  conv,
-  tasks,
-  overall,
-  exportingTaskId,
-  onExport,
-}: {
-  conv: CollectConversation
-  tasks: (Task | null)[]
-  overall: ReturnType<typeof summarize>
-  exportingTaskId: string | null
-  onExport: (taskId: string) => void
-}) {
-  return (
-    <div className="flex justify-start">
-      <div className="w-full max-w-[680px] rounded-2xl rounded-tl-md border border-line bg-surface px-4 py-3">
-        <div className="mb-3 flex items-center gap-2 text-[14.5px]">
-          <span className="font-medium text-ink">Scrapify</span>
-          <span className="text-ink-subtle">·</span>
-          <StatusBadge status={overall.status} />
-          {overall.status === 'running' ? (
-            <span className="ml-auto text-[14px] text-ink-muted">
-              {overall.doneCount}/{tasks.length}
-            </span>
-          ) : null}
-        </div>
-
-        <ul className="space-y-2">
-          {conv.taskIds.map((id, i) => {
-            const task = tasks[i]
-            const url = conv.urls[i] ?? task?.url ?? id
-            return (
-              <li
-                key={id}
-                className="flex items-center gap-3 rounded-md border border-line bg-surface px-3 py-2"
-              >
-                <StatusDot status={task?.status ?? 'pending'} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-[14px] text-ink">{url}</div>
-                  <div className="mt-0.5 text-[13px] text-ink-subtle">
-                    {task ? renderMeta(task) : '排队中'}
-                  </div>
-                </div>
-                {task?.status === 'done' ? (
+      <ul className="space-y-2">
+        {conv.taskIds.map((id, i) => {
+          const task = tasks[i]
+          const url = conv.urls[i] ?? task?.url ?? id
+          const status: Task['status'] = task?.status ?? 'pending'
+          return (
+            <li key={id} className="rounded-md border border-line bg-[#ededed] px-4 py-3 transition-colors hover:border-line-strong hover:bg-[#e2e2e2]">
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 shrink-0 rounded-pill',
+                    status === 'done' && 'bg-success',
+                    status === 'running' && 'animate-pulse bg-ink',
+                    status === 'error' && 'bg-danger',
+                    status === 'pending' && 'bg-ink-subtle',
+                  )}
+                />
+                <span className="min-w-0 flex-1 truncate font-mono text-[14px] text-ink">
+                  {url}
+                </span>
+                <StatusBadge status={status} />
+                {status === 'done' && task ? (
                   <button
                     type="button"
-                    onClick={() => onExport(task.id)}
+                    onClick={() => handleExport(task.id)}
                     disabled={exportingTaskId === task.id}
                     className="flex h-7 items-center gap-1 rounded-pill border border-line px-2.5 text-[13.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
                   >
@@ -220,42 +195,21 @@ function AssistantBubble({
                     )}
                   </button>
                 ) : null}
-              </li>
-            )
-          })}
-        </ul>
+              </div>
+              <div className="mt-1 pl-4 text-[13px] text-ink-subtle">
+                {task ? renderMeta(task) : '排队中'}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
 
-        {overall.status === 'done' ? (
-          <div className="mt-3 flex items-center justify-between rounded-md bg-surface-soft px-3 py-2 text-[14.5px]">
-            <span className="text-ink">
-              ✓ 全部完成 · {overall.totalItems.toLocaleString('en-US')} 件 · 总耗时 {overall.totalElapsed}
-            </span>
-            <button
-              type="button"
-              onClick={() => location.reload()}
-              className="flex items-center gap-1 text-[14px] text-ink-muted transition-colors hover:text-ink"
-            >
-              <RotateCw size={11} />
-              刷新
-            </button>
-          </div>
-        ) : null}
-      </div>
+      {exportError ? (
+        <div className="mt-4 rounded-md border border-danger/30 bg-[#fff4f4] px-3 py-2 text-[14px] text-danger">
+          {exportError}
+        </div>
+      ) : null}
     </div>
-  )
-}
-
-function StatusDot({ status }: { status: Task['status'] }) {
-  return (
-    <span
-      className={cn(
-        'h-1.5 w-1.5 shrink-0 rounded-pill',
-        status === 'done' && 'bg-success',
-        status === 'running' && 'animate-pulse bg-ink',
-        status === 'error' && 'bg-danger',
-        status === 'pending' && 'bg-ink-subtle',
-      )}
-    />
   )
 }
 

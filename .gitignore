@@ -17,3 +17,9 @@ backend/data/runtime.json.bak-*
 
 .DS_Store
 Thumbs.db
+
+# Claude Code session state
+.claude/
+
+# Playwright MCP cache (snapshots, console logs)
+.playwright-mcp/

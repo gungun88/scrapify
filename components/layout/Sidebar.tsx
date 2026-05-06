@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Plus, Settings, User, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { Plus, Settings, User, Loader2, CheckCircle2, AlertCircle, Clock, History } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getConversations } from '@/lib/preferences'
 import type { CollectConversation } from '@/lib/types'
@@ -42,7 +42,7 @@ export function Sidebar({ refreshKey = 0 }: SidebarProps) {
     <aside className="flex h-screen w-[240px] shrink-0 flex-col border-r border-line bg-surface">
       {/* Logo */}
       <div className="flex h-14 items-center px-4">
-        <Link href="/" className="flex items-center gap-2 text-[17px] font-semibold tracking-tight text-ink">
+        <Link href="/" className="flex items-center gap-2 font-display text-[17px] font-semibold tracking-tight text-ink">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink text-[14px] font-bold text-accent-fg">
             S
           </span>
@@ -60,6 +60,17 @@ export function Sidebar({ refreshKey = 0 }: SidebarProps) {
           <Plus size={14} strokeWidth={2.4} />
           新建采集
         </button>
+      </div>
+
+      {/* 采集记录入口 */}
+      <div className="mt-2 px-3">
+        <Link
+          href="/records"
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 py-2 text-[15px] font-medium text-ink transition-colors hover:bg-surface-soft"
+        >
+          <History size={14} strokeWidth={2.4} />
+          采集记录
+        </Link>
       </div>
 
       {/* Recent */}
@@ -91,22 +102,6 @@ export function Sidebar({ refreshKey = 0 }: SidebarProps) {
               )
             })}
           </ul>
-        )}
-
-        {conversations.length > MAX_RECENT ? (
-          <Link
-            href="/records"
-            className="mt-2 block px-2 py-1.5 text-[14px] text-ink-muted transition-colors hover:text-ink"
-          >
-            ⋯ 全部记录
-          </Link>
-        ) : (
-          <Link
-            href="/records"
-            className="mt-2 block px-2 py-1.5 text-[14px] text-ink-muted transition-colors hover:text-ink"
-          >
-            采集记录 →
-          </Link>
         )}
       </nav>
 

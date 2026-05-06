@@ -91,6 +91,18 @@ export function Composer({
 
   const effectiveUrls = mode === 'catalog' ? validUrls.slice(0, 1) : validUrls
 
+  // URL 模式检测：用户在「单品」框粘了目录链接（或反过来）时给软提示
+  // 仅看会被实际提交的那部分（catalog 模式下只校验第 1 行）
+  const mismatchedCount = useMemo(() => {
+    const targets = mode === 'catalog' ? validUrls.slice(0, 1) : validUrls
+    let count = 0
+    for (const u of targets) {
+      const detected = detectUrlMode(u)
+      if (detected !== 'unknown' && detected !== mode) count++
+    }
+    return count
+  }, [validUrls, mode])
+
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
@@ -287,6 +299,24 @@ export function Composer({
         </div>
       </form>
 
+      {/* 模式不匹配软提示：检测到目录/单品链接放错框 */}
+      {mismatchedCount > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#f0c75a]/60 bg-[#fff8d8] px-3 py-2 text-[13.5px] text-ink-muted">
+          <span>
+            检测到 <span className="font-semibold text-ink">{mismatchedCount}</span> 行是
+            <span className="font-semibold text-ink">{mode === 'single' ? '目录' : '单品'}</span>
+            链接，不匹配当前模式
+          </span>
+          <button
+            type="button"
+            onClick={() => setMode(mode === 'single' ? 'catalog' : 'single')}
+            className="rounded-pill bg-ink px-2.5 py-0.5 text-[12.5px] font-medium text-accent-fg transition-colors hover:bg-[#1f1f1f]"
+          >
+            切到{mode === 'single' ? '目录' : '单品'}模式
+          </button>
+        </div>
+      ) : null}
+
       {/* 提示行 */}
       {hint ? (
         <div
@@ -330,4 +360,22 @@ function buildTitle(mode: CollectMode, platform: string, count: number) {
   const modeLabel = mode === 'catalog' ? '目录' : '单品'
   const suffix = count > 1 ? ` ×${count}` : ''
   return `${platformLabel} ${modeLabel}${suffix}`
+}
+
+// URL 类型识别。Shopify-like 站点路径模式：
+// - `/products/<slug>` → 单品（即便含 /collections 前缀也优先视为单品，最后段才是目标）
+// - `/collections` 或 `/collections/...` → 目录
+// - 其余（裸域名、WooCommerce /shop、自定义路由、非主流平台）→ 未知，按宽容策略放行
+type DetectedUrlMode = 'single' | 'catalog' | 'unknown'
+
+function detectUrlMode(url: string): DetectedUrlMode {
+  try {
+    const u = new URL(url)
+    const path = u.pathname.toLowerCase()
+    if (/\/products\/[^/]+/.test(path)) return 'single'
+    if (/\/collections(\/|$)/.test(path)) return 'catalog'
+    return 'unknown'
+  } catch {
+    return 'unknown'
+  }
 }

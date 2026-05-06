@@ -16,8 +16,8 @@ export default function HomePage() {
   return (
     <div className="flex min-h-full flex-col">
       <main className="flex flex-1 items-center justify-center px-6 pb-16 pt-20">
-        <div className="w-full max-w-[760px]">
-          <h1 className="mb-8 text-center text-[30px] font-semibold tracking-tight text-ink">
+        <div className="w-full max-w-[920px]">
+          <h1 className="mb-8 text-center text-[34px] font-semibold tracking-tight text-ink">
             告诉我你想采集什么
           </h1>
 
