@@ -11,52 +11,138 @@
 
 ## 1. 当前总览
 
-### 前端
+> 注：第 20 次整理（2026-05-05）后产品形态从"6 页 SaaS 控制台"改为"对话式采集助手"。
+> 旧六页（任务中心 / 调度 / 字段 / 看板 / 监控 / 代理）整体下线，下方"已完成历史"仅作开发轨迹记录，不代表当前在线功能。
 
-- ~~Next.js App Router 项目骨架已完成~~
-- ~~六个主页面已落地：任务中心、调度计划、字段配置、数据看板、价格监控、代理管理~~
-- ~~基础 UI 组件已拆分完成：`Button`、`Panel`、`Badge`、`ProgressBar`、`StatCard`、`SparkLine`、`MiniBarChart`、`CheckItem`~~
-- ~~任务中心基础交互已完成：列表展示、新建任务弹窗、轮询刷新、局部 optimistic update~~
-- ~~前端 API 代理层已完成：`tasks`、`schedule`、`fields`、`analytics`、`monitor`、`proxy`~~
-- ~~前端已接入后端优先、mock 回退的请求模式~~
-- ~~任务详情面板已完成：可在任务页查看执行参数、状态、心跳和错误信息~~
-- ~~任务执行日志面板已完成：前端已消费任务日志接口并展示日志列表~~
-- ~~任务详情抽屉形态已完成：支持右侧侧滑层、遮罩关闭与 `Esc` 关闭~~
-- ~~日志级别筛选已完成：支持 `all / info / warn / error`~~
-- ~~日志搜索已完成：支持按关键字与日志级别组合筛选~~
-- ~~任务结果摘要与运行历史已完成：任务详情可展示结果预览、失败明细和最近运行记录~~
-- ~~前端已移除正式数据链路中的 mock fallback：后端不可用时会显式返回错误，而不是继续展示演示数据~~
-- ~~局部占位信息仍待清理：例如侧边栏监控 badge 仍是硬编码值，不是来自真实统计聚合~~（已在第 13 次整理处理）
-- ~~监控页"添加站点"与代理页"新增节点"按钮已接入真实写入：第 17 次整理已落地~~
+### 前端（当前在线形态）
+
+- ~~Next.js 14 App Router + Tailwind 项目骨架~~
+- ~~首页 `app/page.tsx`：中央 Composer + 最近常用 chips~~
+- ~~会话详情 `app/c/[id]/page.tsx`：用户气泡 + 助手气泡（任务列表 + CSV 导出）+ 嵌入式 Composer 续采~~
+- ~~采集记录 `app/records/page.tsx`：按时间分桶 + 关键字 / 状态筛选~~
+- ~~个人中心 `app/me/page.tsx`：账户 / 默认偏好 / 字段模板 / 使用统计 4 个 tab~~
+- ~~Composer 组件：单品 / 目录两种模式、多行 URL 校验、平台选择器（含品牌图标）、目录商品数选择器、⌘/Ctrl+Enter 提交~~
+- ~~AppShell + Sidebar：左侧最近会话列表 + 全部记录入口 + 个人入口；提交后通过 Context 触发 Sidebar 刷新~~
+- ~~偏好与会话记录持久层：`lib/preferences.ts` 写 localStorage~~
+- ~~前端 API 代理：仅保留 `app/api/tasks/*` 与 `app/api/fields`~~
+- 未完成事项：会话记录只在 localStorage，跨设备不可见；`me` 页用户名 / 邮箱 / 配额仍是硬编码
+
+### 前端（已下线的旧形态历史，仅供溯源）
+
+- ~~六个主页面曾落地：任务中心、调度计划、字段配置、数据看板、价格监控、代理管理~~（第 20 次整理已整体删除）
+- ~~基础 UI 组件曾完成：`Panel`、`Badge`、`ProgressBar`、`StatCard`、`SparkLine`、`MiniBarChart`、`CheckItem`~~（第 20 次整理已删除，仅保留 `Button`）
+- ~~任务中心曾完成：列表展示、新建任务弹窗、轮询刷新、局部 optimistic update~~（第 20 次整理已删除）
+- ~~前端 API 代理层曾完整：`tasks / schedule / fields / analytics / monitor / proxy`~~（第 20 次整理已只保留 `tasks / fields`）
+- ~~mock fallback 链路曾存在并在第 11 次整理移除~~
+- ~~任务详情抽屉、日志级别筛选、日志搜索、运行历史与失败明细面板均曾完成~~（第 20 次整理已删除）
 
 ### 后端
 
 - ~~Fastify 后端服务骨架已完成~~
-- ~~健康检查接口已完成：`GET /api/health`~~
-- ~~文件持久化已完成：使用 `backend/data/db.json` 保存运行状态~~
-- ~~领域 API 已完成：`tasks`、`fields`、`schedule`、`monitor`、`proxy`、`analytics`~~
-- ~~前端已可通过 `SCRAPIFY_BACKEND_BASE_URL` 接入真实后端~~
-- ~~P2 MVP 任务执行器已完成~~
-- ~~后台 worker 自动推进任务状态已完成~~
-- ~~任务详情接口已完成：`GET /api/tasks/:id`~~
-- ~~任务日志接口已完成：`GET /api/tasks/:id/logs`~~
-- ~~旧任务数据兼容迁移已完成：缺失执行元信息和日志时可自动补齐~~
-- ~~真实采集器已接入首个最小可用版本：`task-runtime` 会抓取 Shopify 公共 `products.json` 接口，按页写回日志、结果预览、失败明细与运行历史~~
-- ~~调度器已真实化到本地 worker 层：`schedule` 会按 `cron` 计算下一次运行并自动创建任务~~
-- ~~任务结果导出链路已完成：新增 `GET /api/tasks/:id/export`，支持独立 CSV / JSON 下载，并在旧任务缺少完整结果时回退导出预览数据~~
-- ~~监控 / 代理 CRUD 已完成：新增 `POST /api/monitor`、`DELETE /api/monitor/:id`、`POST /api/proxy`、`DELETE /api/proxy/:id`，前端"添加站点 / 新增节点"按钮和卡片 / 行级删除按钮已接入真实写入~~
-- ~~非 Shopify 采集器已扩展：`task-runtime` 抓取链路升级为 `shopify-products-json → woocommerce-store-api → sitemap-html → html-structured-data` 四段回退~~
-- ~~Postgres 持久化已切换：`data-store` 内部改为 Drizzle + PG（保留对外签名），`saveDatabase` 加合并写入；Redis 已接入 `@fastify/rate-limit` 全局限流~~
-- 复杂纯前端渲染（SPA 列表页）站点的真实采集仍未覆盖：sitemap-html 回退命中率取决于站点是否在 sitemap 中暴露产品 URL，以及详情页是否带 JSON-LD / `__NEXT_DATA__`
-- ~~价格监控未真实化：`monitor` 当前仍是后端伪运行时，不是真实站点采集~~（第 14 / 16 次整理已落地真实 HTTP 抓取 + 多源价格打分）
-- ~~代理池健康检查未完成：`proxy` 当前仍是伪探活/心跳模拟，不是真实代理检测~~（第 15 次整理已落地真实 TCP 探活）
-- ~~生产级存储未完成：尚未切换 `PostgreSQL / Redis`~~（Phase 0 已落地 PG + Redis）
-- 鉴权与多租户未完成：没有 `JWT / Session / RBAC`（Phase 1 计划）
-- 部署链路未完成：没有 Docker 化、CI/CD、可观测性接入（Phase 4-6 计划）
+- ~~健康检查接口：`GET /api/health`~~
+- ~~领域 API：`tasks` + `fields`（第 21 次整理已下线 `schedule / monitor / proxy / analytics`）~~
+- ~~前端可通过 `SCRAPIFY_BACKEND_BASE_URL` 接入后端~~
+- ~~P2 MVP 任务执行器 + 后台 worker 自动推进~~
+- ~~任务详情 / 日志接口：`GET /api/tasks/:id` + `GET /api/tasks/:id/logs`~~
+- ~~Shopify 公共 `products.json` 真实采集器 + 4 段回退链路：`shopify-products-json → woocommerce-store-api → sitemap-html → html-structured-data`~~
+- ~~任务结果导出：`GET /api/tasks/:id/export`，支持 CSV / JSON，CSV 已对齐 Shopify Admin Export 57 列模板~~
+- ~~Postgres 持久化：Drizzle ORM + PG，`data-store` 内部改为 PG 读写并合并写入；当前仅落 `tasks` + `field_configs` 两张表~~
+- ~~PGlite + ioredis-mock 嵌入式模式：本机无 docker 也能跑端到端~~
+- ~~Redis + `@fastify/rate-limit` 全局限流~~
+- ~~JSON 文件持久化曾完成（`backend/data/db.json`）~~（Phase 0 已切换到 PG）
+- ~~price monitor / proxy 探活 / cron 调度 / analytics 实时聚合曾真实化~~（第 21 次整理已整体下线，代码不再保留）
+- 未完成事项：复杂纯前端渲染（SPA 列表页）站点的真实采集仍未覆盖：sitemap-html 回退命中率取决于站点是否在 sitemap 中暴露产品 URL，以及详情页是否带 JSON-LD / `__NEXT_DATA__`
+- 未完成事项：鉴权与多租户未完成（Phase 1 计划）
+- 未完成事项：部署链路未完成（Phase 4-6 计划）
 
 ---
 
 ## 2. 开发记录
+
+## 2026-05-06 第 21 次整理：下线 schedule / monitor / proxy / analytics 4 套悬空模块
+
+> 接续第 20 次整理遗留的"前后端割裂"问题。第 20 次整理后这 4 套后端 API + worker 在跑但前端无任何入口，本次决定**全部下线**（方案 A），让仓库形态彻底对齐"对话式采集助手"。
+> 后端代码可在 git 历史 `dfe0129` 之前的提交中找回，未来如需重新接入控制台功能请重新设计。
+
+### 后端
+
+- ~~删除 4 个路由文件：`backend/src/routes/{analytics,monitor,proxy,schedule}.ts`~~
+- ~~删除 4 个 worker / service 文件：`backend/src/services/{analytics-builder,monitor-runtime,proxy-runtime,schedule-runtime}.ts`~~
+- ~~`backend/src/server.ts` 已清理：去掉对应 `register*Routes` 与 `start*Worker` 调用，启动时只启 `startTaskWorker`，只注册 `health / tasks / fields` 三套路由~~
+- ~~`backend/src/types.ts` 精简：删除 `ScheduleJob / MonitorItem / ProxyItem / AnalyticsSnapshot / StatCardData / ChartPoint / AnalyticsHighlight` 7 个类型；`DatabaseShape` 收窄到 `{ tasks, fieldConfigs }`~~
+- ~~`backend/src/data/seed.ts` 精简：移除 `scheduleJobs / monitorItems / proxyItems / analyticsSnapshot` 4 套种子数据，仅保留 `tasks` 与 `fieldConfigs`~~
+- ~~`backend/src/services/data-store.ts` 重写：`fetchStateFromPg` / `flushStateToPg` 仅读写 `tasks` 与 `field_configs` 两张表，写入快照 / 合并写入逻辑保持不变~~
+- ~~`backend/scripts/migrate-from-json.ts` 精简：仅迁移 `tasks` + `fieldConfigs`，旧 JSON 中的 4 套数据不再处理~~
+- ~~`backend/src/db/schema.ts` 精简：删除 `scheduleJobs / monitorItems / proxyItems / analyticsSnapshots` 4 张表定义，保留 `users / tasks / fieldConfigs`~~
+- ~~Drizzle 迁移已生成：`backend/src/db/migrations/0001_curvy_kitty_pryde.sql`，内容为 `DROP TABLE` 4 张废弃表（含 CASCADE）~~
+- ~~业务影响：前端没有调用过这 4 套接口，因此不会引入用户可见的回归；任务采集（task-runtime + 4 段链路 + Shopify CSV 导出）100% 保留~~
+- 未完成事项：本机为嵌入式 PGlite，迁移在生产 Postgres 上需手动 `npm run db:migrate` 跑一次；旧 PGlite 数据目录里仍有 4 张表的残留行，下次启动 `loadDatabase` 不会读它们但表本身存在，运维上跑迁移即可清理
+
+### 前端
+
+- 本次 0 改动：第 20 次整理后前端就已经只消费 `tasks / fields` 两套接口
+
+### 文档
+
+- ~~`scrapify-progress.md` 第 1 节"前后端割裂状态"小节已不再适用，本次整理把这一段事实改写成"已下线"~~
+- ~~第 3 节"前端优先项 / 后端优先项"中关于 4 类悬空模块的条目已删除~~
+
+### 验证
+
+- ~~`npm run backend:check` 通过~~
+- ~~`npm run db:generate` 通过：生成 `0001_curvy_kitty_pryde.sql`，仅含 4 个 DROP TABLE~~
+- ~~`npm run build` 通过：路由表显示前端只剩 `/api/fields`、`/api/tasks`、`/api/tasks/[id]`、`/api/tasks/[id]/logs`、`/api/tasks/[id]/export` 5 个 API + 4 个页面（`/`、`/c/[id]`、`/me`、`/records`）~~
+- 未完成事项：未在真 Postgres 上跑过 `db:migrate`；如部署到生产，需先备份再 `npm run db:migrate` 应用 `0001` 迁移
+
+## 2026-05-05 第 20 次整理：UI 重写为对话式 Composer + 旧任务中心整体下线
+
+> 对应 commit `dfe0129 feat: rewrite UI to chat-style composer & bump font sizes`。
+> 这一次是产品形态层面的重写，不是渐进式迭代，因此前/后端状态发生较大错位，必须如实记录。
+
+### 前端
+
+- ~~`app/page.tsx` 已重写为类 ChatGPT 入口：中央 `Composer` 组件 + 下方"最近常用"会话 chips（读 localStorage 中最近 3 条）~~
+- ~~新增 `app/c/[id]/page.tsx` 会话详情页：用户气泡（URL 列表 + 平台 + 商品数）+ 助手气泡（任务列表 + 状态 + CSV 导出按钮）+ "继续采集"嵌入式 Composer，支持删除会话记录~~
+- ~~新增 `app/records/page.tsx` 采集记录页：按"今天 / 昨天 / 本周 / 更早"分组，含关键字搜索（URL / 平台）+ 状态筛选（全部 / 运行中 / 已完成 / 失败）~~
+- ~~新增 `app/me/page.tsx` 个人中心：4 个 tab——账户 / 默认偏好 / 字段模板 / 使用统计；偏好（默认采集模式 / 平台 / 商品数）通过 `lib/preferences.ts` 写入 localStorage~~
+- ~~新增 `components/composer/Composer.tsx`：单品 / 目录两种模式，支持多行 URL 粘贴 + 自动校验 http(s) + 自适应高度 + ⌘/Ctrl+Enter 提交；提交后逐条 `POST /api/tasks` 并把 taskIds 聚合成本地 `CollectConversation` 写 localStorage~~
+- ~~新增 `components/layout/AppShell.tsx` + `SidebarRefreshContext.tsx`：左侧 Sidebar + 右侧内容区，提交后通过 Context 触发 Sidebar 刷新~~
+- ~~`components/layout/Sidebar.tsx` 重写：Logo / 新建采集 / 最近会话（最多 8 条 + "全部记录"链接）/ 底部个人入口；StatusBadge 拆出供详情/记录页复用~~
+- ~~新增平台与商品数选择器：`components/ui/PlatformPicker.tsx`（含品牌图标 + compact/inline 两种形态）+ `components/ui/CatalogLimitPicker.tsx`~~
+- ~~新增品牌图标资产：`public/brand-icons/*`（1688 / costco / funpinpin / hotishop / oemsaas / opencart / shopbase / shopline / shoplus / shopmatrix / shopyy / xshoppy / zencart 等）+ `scripts/fetch-brand-icons.mjs` 拉取脚本~~
+- ~~新增 hook `useTasksByIds.ts`：按 taskId 数组并发拉详情，给会话页用~~
+- ~~新增 `lib/preferences.ts`：localStorage 读写偏好（platform / defaultMode / catalogLimit）+ 会话记录（save / get / list / delete + generateConversationId）~~
+- ~~新增 `lib/mock/platforms.ts` + `lib/mock/brandIcons.ts`：平台元数据 + 默认值 + reconcile 逻辑 + 面包屑/标签/限制格式化~~
+- ~~`lib/types/index.ts` 扩展：`CollectMode / CatalogLimit / CollectConversation / UserPreferences`~~
+- ~~`app/globals.css` + `tailwind.config.ts` 更新：全站字号 +2px、ink-muted/ink-subtle 加深以提高对比度~~
+- ~~`components/ui/Button.tsx` 简化样式与圆角策略~~
+- ~~已删除：`app/dashboard/{tasks,fields,schedule,analytics,monitor,proxy}` 六个主页面、`app/dashboard/layout.tsx`、`components/{tasks,monitor,proxy,analytics}/*`、`components/ui/{Badge,CheckItem,MiniBarChart,Panel,ProgressBar,SparkLine,StatCard}`、`components/layout/Topbar.tsx`、所有 mock 数据文件（`lib/mock/{analytics,fields,monitor,proxy,schedule,tasks,taskRuntime}.ts` + `lib/taskCenterMetrics.ts`）、所有相关 hook（`useAnalytics / useMonitor / useProxy / useSchedule / useTaskDetail`）、相关前端代理路由（`app/api/{analytics,monitor,proxy,schedule}`）~~
+- ~~前端代理层精简：只保留 `app/api/tasks/*` 与 `app/api/fields`~~
+- 未完成事项：会话记录（`CollectConversation`）当前只写 localStorage，跨设备 / 换浏览器看不到历史；后续接入 Phase 1 用户系统后需要把 conversations 也搬到后端按 user_id 存储
+- 未完成事项：`me` 页的用户名 / 邮箱 / "已加入 30 天" / 月度配额 5000 全部硬编码，等 Phase 1 / Phase 2 才接真实账号与额度
+
+### 后端
+
+- 本次 0 改动：仍然完整保留 Phase 0 落地的 `tasks / fields / schedule / monitor / proxy / analytics / health` 7 类路由 + 4 类 worker（task / schedule / monitor / proxy）+ Drizzle/PGlite 持久化 + Redis 限流 + 优雅关闭
+
+### 前后端割裂（本次重写引入的待解决问题）
+
+- ~~`tasks` 与 `fields` 链路前后端对齐~~：前端 Composer / 会话详情 / 记录页 / 个人中心字段模板 tab 全部消费这两个接口
+- `schedule` worker 在跑但前端无任何入口：调度页已删
+- `monitor` worker 在跑但前端无任何入口：监控页已删
+- `proxy` worker 在跑但前端无任何入口：代理页已删
+- `analytics` 实时聚合接口在跑但前端无任何消费者：看板页已删
+- 处置思路（待决策）：要么在 `me` 页或新页面把 schedule / monitor / proxy / analytics 重新做出对话式入口，要么暂停 4 类 worker 中的 schedule/monitor/proxy 节省资源、保留 API 仅供后续重新接 UI；本次先维持现状不动后端
+
+### 文档
+
+- ~~`scrapify-launch-spec.md` 在本次提交里也有少量改动（与 Phase 0 验收清单对齐），并不影响七阶段路线图本身~~
+- ~~`scrapify-progress.md` 本条新增~~
+
+### 验证
+
+- ~~`npm run backend:check` 通过（旧 P0 后端代码未动）~~
+- 实战运行验证已知问题：本机 `npm run backend:dev` 与已有运行实例端口冲突——`Error: listen EADDRINUSE: address already in use 0.0.0.0:8787`，先 `npm run dev:stop` 或手动结束 8787 进程再起；前端日志侧出现过 `GET /api/tasks 502 in 306916ms`，是同一原因导致代理层超时
 
 ## 2026-05-04 第 19 次整理：任务中心精简 + Shopify CSV 导出对齐
 
@@ -387,27 +473,24 @@
 
 ### 前端优先项
 
-- ~~清理剩余硬编码占位信息：侧边栏 badge / 用户卡片~~（已在第 13 次整理处理）
-- ~~监控页”添加站点”、代理页”新增节点”接入真实写入接口~~（已在第 17 次整理处理）
-- 监控 / 代理批量导入入口仍未提供（CSV / 文本粘贴形式），目前只支持单条手工新增
-- 若继续保留 demo 模式，需要在 UI 上清楚区分”真实数据”和”演示数据”
+- ~~决定 schedule / monitor / proxy / analytics 是否在对话式形态下重新提供入口~~（第 21 次整理已选择整体下线，方案 A）
+- 会话记录跨设备同步：`CollectConversation` 当前仅 localStorage，需要在 Phase 1 落地后搬到后端按 user_id 存储
+- `me` 页硬编码替换：用户名 / 邮箱 / "已加入 30 天" / 月度配额 5000 等待 Phase 1 / Phase 2 接真实数据
 
 ### 后端优先项
 
-- ~~非 Shopify 站点采集执行器~~（已扩展为 Shopify / WooCommerce / Sitemap / HTML 四段回退）
 - 复杂纯前端渲染（SPA 列表页）站点的真实采集仍未覆盖：依赖站点是否在 sitemap 中暴露产品 URL
-- 监控链路真实化：让 `monitor` 保存真实价格历史并支持异常判定
-- 代理探活真实化：让 `proxy` 具备真实健康检查、心跳和自动下线能力
+- 旧 PGlite 数据目录里的 4 张废弃表残留行：跑一次 `npm run db:migrate`（应用 `0001` 迁移）即可清理
 
-### 生产化项
+### 生产化项（沿用 Launch Spec 七阶段）
 
-- PostgreSQL 数据库迁移
-- Redis / 队列系统接入
-- 鉴权与 RBAC
-- 多租户隔离
-- Docker 化与部署脚本
-- CI/CD
-- 日志、指标、追踪接入
+- Phase 1：鉴权 / 多租户（users / sessions / email_verifications / password_resets + JWT + 邮件 + middleware）
+- Phase 2：额度系统（quota_plans / usage_counters + 创建前 checkQuota）
+- Phase 3：采集走代理池 + 失败重试（BullMQ）+ 写接口/登录精细限流
+- Phase 4：Dockerfile + docker-compose.prod + Caddy + deploy/README
+- Phase 5：pino 日志 + Sentry + Turnstile + 安全头 + CSRF
+- Phase 6：Vitest 单测 + Playwright e2e + GitHub Actions
+- Phase 7：合规与运营（隐私 / 条款 / GDPR 导出 / 账号删除）
 
 ---
 

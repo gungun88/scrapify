@@ -4,17 +4,10 @@ import rateLimit from '@fastify/rate-limit'
 import Fastify from 'fastify'
 import { backendConfig } from './config'
 import { closeDbConnections, getRedis, initDb } from './db/client'
-import { registerAnalyticsRoutes } from './routes/analytics'
 import { registerFieldRoutes } from './routes/fields'
 import { registerHealthRoutes } from './routes/health'
-import { registerMonitorRoutes } from './routes/monitor'
-import { registerProxyRoutes } from './routes/proxy'
-import { registerScheduleRoutes } from './routes/schedule'
 import { registerTaskRoutes } from './routes/tasks'
 import { loadDatabase } from './services/data-store'
-import { startMonitorWorker } from './services/monitor-runtime'
-import { startProxyWorker } from './services/proxy-runtime'
-import { startScheduleWorker } from './services/schedule-runtime'
 import { startTaskWorker } from './services/task-runtime'
 
 async function createServer() {
@@ -42,10 +35,6 @@ async function createServer() {
   await registerHealthRoutes(app)
   await registerTaskRoutes(app)
   await registerFieldRoutes(app)
-  await registerScheduleRoutes(app)
-  await registerMonitorRoutes(app)
-  await registerProxyRoutes(app)
-  await registerAnalyticsRoutes(app)
 
   return app
 }
@@ -54,9 +43,6 @@ async function start() {
   await initDb()
   await loadDatabase()
   startTaskWorker()
-  startScheduleWorker()
-  startMonitorWorker()
-  startProxyWorker()
   const app = await createServer()
 
   // 优雅关闭：让 PGlite 释放 postmaster.pid 锁，避免下次启动崩溃

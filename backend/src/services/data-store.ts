@@ -1,22 +1,13 @@
-import { eq } from 'drizzle-orm'
 import { createSeedDatabase } from '../data/seed'
 import { getDb } from '../db/client'
 import {
-  analyticsSnapshots,
   fieldConfigs as fieldConfigsTable,
-  monitorItems as monitorItemsTable,
-  proxyItems as proxyItemsTable,
-  scheduleJobs as scheduleJobsTable,
   tasks as tasksTable,
 } from '../db/schema'
 import type {
-  AnalyticsSnapshot,
   DatabaseShape,
   FieldConfig,
   FieldType,
-  MonitorItem,
-  ProxyItem,
-  ScheduleJob,
   TaskFailureDetail,
   TaskLogEntry,
   TaskResultRow,
@@ -24,8 +15,6 @@ import type {
   TaskRunRecord,
   TaskRuntimeRecord,
 } from '../types'
-
-const ANALYTICS_SINGLETON_ID = 'global-analytics'
 
 let state: DatabaseShape | null = null
 
@@ -251,22 +240,12 @@ async function fetchStateFromPg(): Promise<DatabaseShape | null> {
   const db = getDb()
   const now = Date.now()
 
-  const [taskRows, fieldRows, scheduleRows, monitorRows, proxyRows, analyticsRows] = await Promise.all([
+  const [taskRows, fieldRows] = await Promise.all([
     db.select().from(tasksTable),
     db.select().from(fieldConfigsTable),
-    db.select().from(scheduleJobsTable),
-    db.select().from(monitorItemsTable),
-    db.select().from(proxyItemsTable),
-    db.select().from(analyticsSnapshots).where(eq(analyticsSnapshots.id, ANALYTICS_SINGLETON_ID)),
   ])
 
-  const everythingEmpty =
-    taskRows.length === 0 &&
-    fieldRows.length === 0 &&
-    scheduleRows.length === 0 &&
-    monitorRows.length === 0 &&
-    proxyRows.length === 0 &&
-    analyticsRows.length === 0
+  const everythingEmpty = taskRows.length === 0 && fieldRows.length === 0
 
   if (everythingEmpty) {
     return null
@@ -290,29 +269,9 @@ async function fetchStateFromPg(): Promise<DatabaseShape | null> {
       )
     : seed.fieldConfigs
 
-  const scheduleJobs: ScheduleJob[] = scheduleRows.length
-    ? scheduleRows.map((row: { payload: ScheduleJob }) => row.payload)
-    : seed.scheduleJobs
-
-  const monitorItems: MonitorItem[] = monitorRows.length
-    ? monitorRows.map((row: { payload: MonitorItem }) => row.payload)
-    : seed.monitorItems
-
-  const proxyItems: ProxyItem[] = proxyRows.length
-    ? proxyRows.map((row: { payload: ProxyItem }) => row.payload)
-    : seed.proxyItems
-
-  const analyticsSnapshot: AnalyticsSnapshot = analyticsRows[0]
-    ? (analyticsRows[0].payload as AnalyticsSnapshot)
-    : seed.analyticsSnapshot
-
   return {
     tasks,
     fieldConfigs,
-    scheduleJobs,
-    monitorItems,
-    proxyItems,
-    analyticsSnapshot,
   }
 }
 
@@ -350,46 +309,6 @@ async function flushStateToPg(snapshot: DatabaseShape): Promise<void> {
         })),
       )
     }
-
-    await tx.delete(scheduleJobsTable)
-    if (snapshot.scheduleJobs.length > 0) {
-      await tx.insert(scheduleJobsTable).values(
-        snapshot.scheduleJobs.map((job) => ({
-          id: job.id,
-          userId: null,
-          payload: job,
-        })),
-      )
-    }
-
-    await tx.delete(monitorItemsTable)
-    if (snapshot.monitorItems.length > 0) {
-      await tx.insert(monitorItemsTable).values(
-        snapshot.monitorItems.map((item) => ({
-          id: item.id,
-          userId: null,
-          payload: item,
-        })),
-      )
-    }
-
-    await tx.delete(proxyItemsTable)
-    if (snapshot.proxyItems.length > 0) {
-      await tx.insert(proxyItemsTable).values(
-        snapshot.proxyItems.map((item) => ({
-          id: item.id,
-          userId: null,
-          payload: item,
-        })),
-      )
-    }
-
-    await tx.delete(analyticsSnapshots)
-    await tx.insert(analyticsSnapshots).values({
-      id: ANALYTICS_SINGLETON_ID,
-      userId: null,
-      payload: snapshot.analyticsSnapshot,
-    })
   })
 }
 
@@ -418,10 +337,6 @@ async function performSave(): Promise<void> {
   const snapshot: DatabaseShape = {
     tasks: state.tasks.map((task) => ({ ...task })),
     fieldConfigs: state.fieldConfigs.map((field) => ({ ...field })),
-    scheduleJobs: state.scheduleJobs.map((job) => ({ ...job })),
-    monitorItems: state.monitorItems.map((item) => ({ ...item })),
-    proxyItems: state.proxyItems.map((item) => ({ ...item })),
-    analyticsSnapshot: state.analyticsSnapshot,
   }
 
   await flushStateToPg(snapshot)

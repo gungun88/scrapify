@@ -36,31 +36,3 @@ export const fieldConfigs = pgTable('field_configs', {
   type: text('type').notNull(),
   enabled: boolean('enabled').notNull().default(true),
 })
-
-export const scheduleJobs = pgTable('schedule_jobs', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  payload: jsonb('payload').notNull(), // 完整 ScheduleJob
-})
-
-export const monitorItems = pgTable('monitor_items', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  payload: jsonb('payload').notNull(), // 完整 MonitorItem
-})
-
-export const proxyItems = pgTable('proxy_items', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  payload: jsonb('payload').notNull(), // 完整 ProxyItem
-})
-
-// analytics_snapshots 暂时只保留单条全局快照（Phase 1 切到 per-user）
-export const analyticsSnapshots = pgTable('analytics_snapshots', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  payload: jsonb('payload').notNull(), // AnalyticsSnapshot
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-})
