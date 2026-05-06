@@ -69,7 +69,7 @@ export function Composer({
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 80), 260)}px`
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 140), 360)}px`
   }, [text])
 
   const enabledFieldIds = useMemo(
@@ -179,7 +179,7 @@ export function Composer({
   }
 
   return (
-    <div className={cn('w-full', embedded ? '' : 'mx-auto max-w-[760px]')}>
+    <div className={cn('w-full', embedded ? '' : 'mx-auto max-w-[920px]')}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
@@ -188,34 +188,34 @@ export function Composer({
       >
         <div
           className={cn(
-            'rounded-lg border-[1.5px] border-line-strong bg-surface',
-            'transition-shadow focus-within:shadow-[0_2px_28px_rgba(0,0,0,0.06)]',
+            'rounded-2xl border-[1.5px] border-line-strong bg-surface',
+            'transition-shadow focus-within:shadow-[0_4px_36px_rgba(0,0,0,0.08)]',
           )}
         >
           {/* 模式切换 */}
-          <div className="flex items-center gap-2 border-b border-line px-5 py-2.5">
+          <div className="flex items-center gap-2 border-b border-line px-7 py-3.5">
             <ModeRadio active={mode === 'single'} onClick={() => setMode('single')} label="单品" />
             <ModeRadio active={mode === 'catalog'} onClick={() => setMode('catalog')} label="目录" />
-            <span className="ml-auto text-[13.5px] text-ink-subtle">
+            <span className="ml-auto text-[14px] text-ink-subtle">
               {mode === 'single' ? '支持每行一个 URL，批量提交' : '一次仅采集一个集合页'}
             </span>
           </div>
 
           {/* 多行输入 */}
-          <div className="px-5 pt-4">
+          <div className="px-7 pt-6">
             <textarea
               ref={textareaRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={PLACEHOLDER[mode]}
-              rows={3}
-              className="block w-full resize-none border-0 bg-transparent text-[16.5px] leading-6 text-ink placeholder:text-ink-subtle focus:outline-none"
+              rows={5}
+              className="block w-full resize-none border-0 bg-transparent text-[17px] leading-7 text-ink placeholder:text-ink-subtle focus:outline-none"
             />
           </div>
 
           {/* 平台选择（折叠 chip） */}
-          <div className="flex items-center gap-2 px-5 pb-3 pt-1">
+          <div className="flex items-center gap-2.5 px-7 pb-4 pt-2">
             <span className="text-[13.5px] font-medium uppercase tracking-wider text-ink-subtle">
               平台
             </span>
@@ -224,7 +224,7 @@ export function Composer({
 
           {/* 商品数（仅目录模式） */}
           {mode === 'catalog' ? (
-            <div className="flex items-center gap-2 px-5 pb-3">
+            <div className="flex items-center gap-2.5 px-7 pb-4">
               <span className="text-[13.5px] font-medium uppercase tracking-wider text-ink-subtle">
                 商品数
               </span>
@@ -233,18 +233,18 @@ export function Composer({
           ) : null}
 
           {/* 提交栏 */}
-          <div className="flex items-center gap-3 border-t border-line px-5 py-2.5">
+          <div className="flex items-center gap-3 border-t border-line px-7 py-3.5">
             <button
               type="button"
               onClick={persistAsDefault}
-              className="flex h-8 w-8 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink"
+              className="flex h-9 w-9 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink"
               title="将当前选择保存为默认偏好"
               aria-label="保存为默认偏好"
             >
-              <Plus size={16} strokeWidth={2.4} />
+              <Plus size={18} strokeWidth={2.4} />
             </button>
 
-            <div className="flex-1 text-[14px] text-ink-subtle">
+            <div className="flex-1 text-[14.5px] text-ink-subtle">
               {urlLines.length === 0 ? (
                 <span>按 ⌘ / Ctrl + Enter 提交</span>
               ) : mode === 'catalog' ? (
@@ -265,7 +265,7 @@ export function Composer({
               type="submit"
               disabled={submitting || effectiveUrls.length === 0}
               className={cn(
-                'inline-flex h-9 items-center gap-1.5 rounded-pill px-5 text-[15px] font-medium transition-all',
+                'inline-flex h-10 items-center gap-1.5 rounded-pill px-6 text-[15px] font-medium transition-all',
                 submitting || effectiveUrls.length === 0
                   ? 'cursor-not-allowed bg-surface-soft text-ink-subtle'
                   : 'bg-ink text-accent-fg hover:bg-[#1f1f1f]',
@@ -273,13 +273,13 @@ export function Composer({
             >
               {submitting ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={15} className="animate-spin" />
                   提交中
                 </>
               ) : (
                 <>
                   提交
-                  <ArrowUp size={14} strokeWidth={2.4} />
+                  <ArrowUp size={15} strokeWidth={2.4} />
                 </>
               )}
             </button>
@@ -316,7 +316,7 @@ function ModeRadio({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-pill px-3 py-1 text-[14.5px] font-medium transition-colors',
+        'rounded-pill px-3.5 py-1.5 text-[15px] font-medium transition-colors',
         active ? 'bg-ink text-accent-fg' : 'text-ink-muted hover:text-ink',
       )}
     >
