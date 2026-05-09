@@ -4,6 +4,22 @@ import { ChevronDown, Package } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { getPlatformBreadcrumb, getPlatformGroups } from '@/lib/mock/platforms'
 import { getBrandIcon } from '@/lib/mock/brandIcons'
+
+/**
+ * 判断品牌色是否"过暗"（在深色背景上几乎隐形）。
+ * 用 Rec.709 感知亮度，阈值 80：
+ *   #1A1A1A → 26（暗）  → true
+ *   #0F146D → 25（暗）  → true
+ *   #FF7A45 → 158（亮） → false
+ */
+function isDarkBrandColor(hex: string): boolean {
+  const c = hex.replace('#', '')
+  if (c.length !== 6) return false
+  const r = parseInt(c.slice(0, 2), 16)
+  const g = parseInt(c.slice(2, 4), 16)
+  const b = parseInt(c.slice(4, 6), 16)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 80
+}
 import type { CollectMode, PlatformGroup, PlatformOption } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -84,7 +100,7 @@ function CompactPlatformPicker({
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-2 w-[680px] max-w-[min(680px,calc(100vw-48px))] overflow-hidden rounded-md border border-line bg-surface shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
+        <div className="absolute left-0 top-full z-50 mt-2 w-[680px] max-w-[min(680px,calc(100vw-48px))] overflow-hidden rounded-md border border-line bg-surface shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
           <PlatformGroupsBody mode={mode} value={value} onChange={handlePick} />
         </div>
       ) : null}
@@ -164,6 +180,7 @@ function PlatformChip({
     <button
       type="button"
       onClick={onClick}
+      data-color-dark={!active && hasBrand && isDarkBrandColor(brand!.color) ? 'true' : undefined}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-[14px] transition-colors',
         active

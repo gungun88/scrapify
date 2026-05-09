@@ -2,11 +2,17 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Search } from 'lucide-react'
+import {
+  ConversationCard,
+  ConversationListHeader,
+  aggregateElapsed,
+  inferConversationStatus,
+} from '@/components/conversation/ConversationCard'
 import { useTasks } from '@/hooks/useTasks'
-import { StatusBadge } from '@/components/layout/Sidebar'
 import { getPlatformBreadcrumb } from '@/lib/mock/platforms'
-import { getConversations } from '@/lib/preferences'
-import type { CollectConversation, Task } from '@/lib/types'
+import { deleteConversation, getConversations } from '@/lib/preferences'
+import type { CollectConversation, Task, TaskStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 type Filter = 'all' | 'running' | 'done' | 'error'
@@ -27,6 +33,14 @@ function bucketOf(iso: string): '今天' | '昨天' | '本周' | '更早' {
   return '更早'
 }
 
+interface Enriched {
+  conv: CollectConversation
+  status: TaskStatus
+  totalItems: number
+  elapsedText: string
+  tasks: Task[]
+}
+
 export default function RecordsPage() {
   const [conversations, setConversations] = useState<CollectConversation[]>([])
   const [keyword, setKeyword] = useState('')
@@ -43,15 +57,15 @@ export default function RecordsPage() {
     return m
   }, [tasksQuery.data])
 
-  const enriched = useMemo(
+  const enriched: Enriched[] = useMemo(
     () =>
-      conversations.map((c) => {
-        const tasks = c.taskIds.map((id) => taskById.get(id)).filter(Boolean) as Task[]
-        const overall = inferStatus(tasks, c.taskIds.length)
+      conversations.map((conv) => {
+        const tasks = conv.taskIds.map((id) => taskById.get(id)).filter(Boolean) as Task[]
+        const status = inferConversationStatus(tasks, conv.taskIds.length)
         const totalItems = tasks
           .filter((t) => t.status === 'done')
           .reduce((s, t) => s + t.itemCount, 0)
-        return { conv: c, status: overall, totalItems }
+        return { conv, status, totalItems, elapsedText: aggregateElapsed(tasks), tasks }
       }),
     [conversations, taskById],
   )
@@ -61,11 +75,7 @@ export default function RecordsPage() {
     return enriched.filter(({ conv, status }) => {
       if (filter !== 'all' && status !== filter) return false
       if (!kw) return true
-      const blob = [
-        conv.title,
-        ...conv.urls,
-        getPlatformBreadcrumb(conv.platform),
-      ]
+      const blob = [conv.title, ...conv.urls, getPlatformBreadcrumb(conv.platform)]
         .join(' ')
         .toLowerCase()
       return blob.includes(kw)
@@ -73,24 +83,46 @@ export default function RecordsPage() {
   }, [enriched, keyword, filter])
 
   const grouped = useMemo(() => {
-    const g: Record<string, typeof filtered> = { 今天: [], 昨天: [], 本周: [], 更早: [] }
+    const g: Record<string, Enriched[]> = { 今天: [], 昨天: [], 本周: [], 更早: [] }
     for (const item of filtered) g[bucketOf(item.conv.createdAt)].push(item)
     return g
   }, [filtered])
 
+  function handleDelete(id: string) {
+    if (!confirm('删除这条采集记录？关联的任务和数据会一并清除。')) return
+    deleteConversation(id)
+    setConversations(getConversations())
+  }
+
   return (
-    <div className="mx-auto w-full max-w-[820px] px-6 py-8">
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div className="px-2 py-1.5 text-[14px] text-ink-muted">
-          采集记录 · 共 {conversations.length} 次会话
+    <div className="mx-auto w-full max-w-[1200px] px-6 py-8">
+      {/* 顶部导航：返回首页 + 标题 + 搜索 + 状态筛选 */}
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+          >
+            <ArrowLeft size={14} />
+            返回首页
+          </Link>
+          <div className="text-[15px] text-ink-muted">
+            采集记录 · 共 <span className="font-semibold text-ink">{conversations.length}</span> 次
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜索 URL / 平台..."
-            className="h-8 w-[220px] rounded-md border border-line bg-surface px-3 text-[15px] text-ink placeholder:text-ink-subtle focus:border-line-strong focus:outline-none"
-          />
+          <label className="relative">
+            <Search
+              size={13}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+            />
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="搜索 URL / 平台..."
+              className="h-8 w-[220px] rounded-md border border-line bg-surface pl-7 pr-3 text-[14px] text-ink placeholder:text-ink-subtle focus:border-line-strong focus:outline-none"
+            />
+          </label>
           <FilterChip current={filter} target="all" label="全部" onChange={setFilter} />
           <FilterChip current={filter} target="running" label="运行中" onChange={setFilter} />
           <FilterChip current={filter} target="done" label="已完成" onChange={setFilter} />
@@ -99,9 +131,9 @@ export default function RecordsPage() {
       </header>
 
       {filtered.length === 0 ? (
-        <div className="rounded-md border border-dashed border-line py-16 text-center text-[15px] text-ink-subtle">
+        <div className="rounded-2xl border border-dashed border-line py-16 text-center text-[14.5px] text-ink-subtle">
           {conversations.length === 0
-            ? '还没有采集记录，回到主页发起一次采集吧。'
+            ? '还未提交采集任务，回到首页发起一次采集吧。'
             : '没有匹配的记录'}
         </div>
       ) : (
@@ -109,51 +141,26 @@ export default function RecordsPage() {
           .filter(([, list]) => list.length > 0)
           .map(([bucket, list]) => (
             <section key={bucket} className="mb-8">
-              <div className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-ink-subtle">
+              <div className="mb-3 text-[12.5px] font-semibold uppercase tracking-wider text-ink-subtle">
                 {bucket}
               </div>
-              <ul className="space-y-2">
-                {list.map(({ conv, status, totalItems }) => (
-                  <li key={conv.id}>
-                    <Link
-                      href={`/c/${conv.id}`}
-                      className="block rounded-md border border-line bg-[#ededed] px-4 py-3 transition-colors hover:border-line-strong hover:bg-[#e2e2e2]"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={cn(
-                            'h-1.5 w-1.5 shrink-0 rounded-pill',
-                            status === 'done' && 'bg-success',
-                            status === 'running' && 'animate-pulse bg-ink',
-                            status === 'error' && 'bg-danger',
-                            status === 'pending' && 'bg-ink-subtle',
-                          )}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-[15.5px] font-medium text-ink">
-                          {conv.title}
-                        </span>
-                        <StatusBadge status={status} />
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 pl-4 text-[13.5px] text-ink-subtle">
-                        <span>
-                          {status === 'done'
-                            ? `${totalItems.toLocaleString('en-US')} 件`
-                            : `${conv.urls.length} 个链接`}
-                        </span>
-                        <span>·</span>
-                        <span>{getPlatformBreadcrumb(conv.platform)}</span>
-                        <span>·</span>
-                        <span>
-                          {new Date(conv.createdAt).toLocaleTimeString('zh-CN', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-md border border-line">
+                <ConversationListHeader />
+                <div className="divide-y divide-line">
+                  {list.map((item) => (
+                    <ConversationCard
+                      key={item.conv.id}
+                      conv={item.conv}
+                      status={item.status}
+                      totalItems={item.totalItems}
+                      elapsedText={item.elapsedText}
+                      tasks={item.tasks}
+                      onDelete={() => handleDelete(item.conv.id)}
+                      framed={false}
+                    />
+                  ))}
+                </div>
+              </div>
             </section>
           ))
       )}
@@ -178,7 +185,7 @@ function FilterChip({
       type="button"
       onClick={() => onChange(target)}
       className={cn(
-        'rounded-pill border px-3 py-1 text-[14px] font-medium transition-colors',
+        'rounded-pill border px-3 py-1 text-[13px] font-medium transition-colors',
         active
           ? 'border-ink bg-ink text-accent-fg'
           : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink',
@@ -187,15 +194,4 @@ function FilterChip({
       {label}
     </button>
   )
-}
-
-function inferStatus(tasks: Task[], total: number): Task['status'] {
-  if (tasks.length === 0 || tasks.length < total) {
-    if (tasks.some((t) => t.status === 'running')) return 'running'
-    return 'pending'
-  }
-  if (tasks.some((t) => t.status === 'running')) return 'running'
-  if (tasks.every((t) => t.status === 'done')) return 'done'
-  if (tasks.some((t) => t.status === 'error')) return 'error'
-  return 'pending'
 }

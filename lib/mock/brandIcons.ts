@@ -62,7 +62,7 @@ export const BRAND_ICONS: Record<string, BrandIcon> = {
     color: '#0F146D',
   },
   costco: {
-    imgSrc: '/brand-icons/costco-fallback.ico',
+    imgSrc: '/brand-icons/costco.svg',
     color: '#E32127',
   },
   temu: {
@@ -76,7 +76,7 @@ export const BRAND_ICONS: Record<string, BrandIcon> = {
 
   // SAAS 独立站（来自抓取的 favicon）
   shopmatrix: { imgSrc: '/brand-icons/shopmatrix.png', color: '#1A1A1A' },
-  xshoppy: { imgSrc: '/brand-icons/xshoppy.ico', color: '#FF7A45' },
+  xshoppy: { imgSrc: '/brand-icons/xshoppy.svg', color: '#FF7A45' },
   funpinpin: { imgSrc: '/brand-icons/funpinpin.png', color: '#FF6F61' },
   shopbase: { imgSrc: '/brand-icons/shopbase.png', color: '#1F8FFF' },
   shopline: { imgSrc: '/brand-icons/shopline.png', color: '#1F8FFF' },

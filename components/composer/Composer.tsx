@@ -1,6 +1,7 @@
 'use client'
 
-import { ArrowUp, Loader2, Plus } from 'lucide-react'
+import { ArrowUp, History, Loader2 } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { CatalogLimitPicker } from '@/components/ui/CatalogLimitPicker'
@@ -17,7 +18,6 @@ import {
   generateConversationId,
   getPreferences,
   saveConversation,
-  savePreferences,
 } from '@/lib/preferences'
 import type { CatalogLimit, CollectConversation, CollectMode, NewTaskForm, Task } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -69,7 +69,7 @@ export function Composer({
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 140), 360)}px`
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 88), 320)}px`
   }, [text])
 
   const enabledFieldIds = useMemo(
@@ -185,13 +185,8 @@ export function Composer({
     }
   }
 
-  function persistAsDefault() {
-    savePreferences({ platform, defaultMode: mode, catalogLimit })
-    setHint({ kind: 'info', text: '当前选择已保存为默认偏好。' })
-  }
-
   return (
-    <div className={cn('w-full', embedded ? '' : 'mx-auto max-w-[920px]')}>
+    <div className={cn('relative z-20 w-full', embedded ? '' : 'mx-auto max-w-[920px]')}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
@@ -200,12 +195,12 @@ export function Composer({
       >
         <div
           className={cn(
-            'rounded-2xl border-[1.5px] border-line-strong bg-surface',
+            'composer-card rounded-3xl border-[1.5px] border-line-strong bg-surface',
             'transition-shadow focus-within:shadow-[0_4px_36px_rgba(0,0,0,0.08)]',
           )}
         >
           {/* 模式切换 */}
-          <div className="flex items-center gap-2 border-b border-line px-7 py-3.5">
+          <div className="flex items-center gap-2 border-b border-line px-5 py-3">
             <ModeRadio active={mode === 'single'} onClick={() => setMode('single')} label="单品" />
             <ModeRadio active={mode === 'catalog'} onClick={() => setMode('catalog')} label="目录" />
             <span className="ml-auto text-[14px] text-ink-subtle">
@@ -214,20 +209,20 @@ export function Composer({
           </div>
 
           {/* 多行输入 */}
-          <div className="px-7 pt-6">
+          <div className="px-5 pt-4">
             <textarea
               ref={textareaRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={PLACEHOLDER[mode]}
-              rows={5}
+              rows={3}
               className="block w-full resize-none border-0 bg-transparent text-[17px] leading-7 text-ink placeholder:text-ink-subtle focus:outline-none"
             />
           </div>
 
           {/* 平台选择（折叠 chip） */}
-          <div className="flex items-center gap-2.5 px-7 pb-4 pt-2">
+          <div className="flex items-center gap-2.5 px-5 pb-3 pt-2">
             <span className="text-[13.5px] font-medium uppercase tracking-wider text-ink-subtle">
               平台
             </span>
@@ -236,7 +231,7 @@ export function Composer({
 
           {/* 商品数（仅目录模式） */}
           {mode === 'catalog' ? (
-            <div className="flex items-center gap-2.5 px-7 pb-4">
+            <div className="flex items-center gap-2.5 px-5 pb-3">
               <span className="text-[13.5px] font-medium uppercase tracking-wider text-ink-subtle">
                 商品数
               </span>
@@ -245,21 +240,17 @@ export function Composer({
           ) : null}
 
           {/* 提交栏 */}
-          <div className="flex items-center gap-3 border-t border-line px-7 py-3.5">
-            <button
-              type="button"
-              onClick={persistAsDefault}
-              className="flex h-9 w-9 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink"
-              title="将当前选择保存为默认偏好"
-              aria-label="保存为默认偏好"
+          <div className="flex items-center gap-3 border-t border-line px-5 py-3">
+            <Link
+              href="/records"
+              className="inline-flex h-9 items-center gap-1.5 rounded-pill px-3.5 text-[13.5px] font-medium text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink"
             >
-              <Plus size={18} strokeWidth={2.4} />
-            </button>
+              <History size={14} strokeWidth={2.2} />
+              采集记录
+            </Link>
 
             <div className="flex-1 text-[14.5px] text-ink-subtle">
-              {urlLines.length === 0 ? (
-                <span>按 ⌘ / Ctrl + Enter 提交</span>
-              ) : mode === 'catalog' ? (
+              {urlLines.length === 0 ? null : mode === 'catalog' ? (
                 <span>
                   目录模式：将采集 <span className="font-semibold text-ink">{effectiveUrls.length}</span> 个集合页
                   {urlLines.length > 1 ? <span className="text-ink-subtle">（多余行将被忽略）</span> : null}

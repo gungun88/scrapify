@@ -76,7 +76,7 @@ export default function ConversationPage() {
   })
 
   return (
-    <div className="mx-auto w-full max-w-[820px] px-6 py-8">
+    <div className="mx-auto w-full max-w-[1200px] px-6 py-8">
       {/* 顶部 */}
       <header className="mb-5 flex items-start gap-3">
         <Link
@@ -130,7 +130,7 @@ export default function ConversationPage() {
       </header>
 
       {/* 提交链接（折叠） */}
-      <div className="mb-6 pl-11">
+      <div className="mb-6">
         <button
           type="button"
           onClick={() => setShowUrls((v) => !v)}
@@ -153,18 +153,42 @@ export default function ConversationPage() {
         ) : null}
       </div>
 
-      {/* 任务列表 */}
+      {/* 任务列表：与 /records 同款骨架 */}
       <div className="mb-2 px-2 text-[13px] font-semibold uppercase tracking-wider text-ink-subtle">
         任务
       </div>
-      <ul className="space-y-2">
-        {conv.taskIds.map((id, i) => {
-          const task = tasks[i]
-          const url = conv.urls[i] ?? task?.url ?? id
-          const status: Task['status'] = task?.status ?? 'pending'
-          return (
-            <li key={id} className="rounded-md border border-line bg-[#ededed] px-4 py-3 transition-colors hover:border-line-strong hover:bg-[#e2e2e2]">
-              <div className="flex items-center gap-3">
+      <div className="overflow-x-auto rounded-md border border-line">
+        <div className="flex items-center gap-4 border-b border-line bg-surface-soft/40 px-5 py-2.5">
+          <div className="w-[20px] shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+            URL
+          </div>
+          <div className="w-[96px] shrink-0 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+            状态
+          </div>
+          <div className="w-[80px] shrink-0 text-right text-[11px] font-semibold uppercase tracking-wider text-success">
+            已采集
+          </div>
+          <div className="w-[76px] shrink-0 text-right text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+            用时
+          </div>
+          <div className="w-[88px] shrink-0 text-right text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+            进度
+          </div>
+          <div className="w-[88px] shrink-0 text-right text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+            操作
+          </div>
+        </div>
+        <div className="divide-y divide-line">
+          {conv.taskIds.map((id, i) => {
+            const task = tasks[i]
+            const url = conv.urls[i] ?? task?.url ?? id
+            const status: Task['status'] = task?.status ?? 'pending'
+            return (
+              <div
+                key={id}
+                className="group flex items-center gap-4 bg-surface px-5 py-3.5 text-[14.5px] transition-colors hover:bg-surface-soft"
+              >
                 <span
                   className={cn(
                     'h-1.5 w-1.5 shrink-0 rounded-pill',
@@ -174,35 +198,63 @@ export default function ConversationPage() {
                     status === 'pending' && 'bg-ink-subtle',
                   )}
                 />
-                <span className="min-w-0 flex-1 truncate font-mono text-[14px] text-ink">
+                <div className="w-[4px] shrink-0" aria-hidden />
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 truncate font-mono text-[13.5px] text-ink hover:underline"
+                  title={url}
+                >
                   {url}
-                </span>
-                <StatusBadge status={status} />
-                {status === 'done' && task ? (
-                  <button
-                    type="button"
-                    onClick={() => handleExport(task.id)}
-                    disabled={exportingTaskId === task.id}
-                    className="flex h-7 items-center gap-1 rounded-pill border border-line px-2.5 text-[13.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
-                  >
-                    {exportingTaskId === task.id ? (
-                      '...'
-                    ) : (
-                      <>
-                        <Download size={11} />
-                        CSV
-                      </>
-                    )}
-                  </button>
-                ) : null}
+                </a>
+                <div className="w-[96px] shrink-0">
+                  <StatusBadge status={status} />
+                </div>
+                <div
+                  className={cn(
+                    'w-[80px] shrink-0 text-right tabular-nums font-semibold',
+                    status === 'done' && task && task.itemCount > 0
+                      ? 'text-success'
+                      : 'text-ink-subtle',
+                  )}
+                >
+                  {task && task.itemCount > 0 ? task.itemCount.toLocaleString('en-US') : '—'}
+                </div>
+                <div className="w-[76px] shrink-0 text-right tabular-nums text-ink-muted">
+                  {task?.elapsed || '—'}
+                </div>
+                <div className="w-[88px] shrink-0 text-right tabular-nums text-ink-muted">
+                  {task ? `${Math.round(task.progress)}%` : '—'}
+                </div>
+                <div className="flex w-[88px] shrink-0 items-center justify-end">
+                  {status === 'done' && task ? (
+                    <button
+                      type="button"
+                      onClick={() => handleExport(task.id)}
+                      disabled={exportingTaskId === task.id}
+                      className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink disabled:opacity-50"
+                      aria-label="导出 CSV"
+                      title="导出 CSV"
+                    >
+                      {exportingTaskId === task.id ? (
+                        '...'
+                      ) : (
+                        <>
+                          <Download size={13} />
+                          CSV
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <span className="text-[13px] text-ink-subtle/50">—</span>
+                  )}
+                </div>
               </div>
-              <div className="mt-1 pl-4 text-[13px] text-ink-subtle">
-                {task ? renderMeta(task) : '排队中'}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+            )
+          })}
+        </div>
+      </div>
 
       {exportError ? (
         <div className="mt-4 rounded-md border border-danger/30 bg-[#fff4f4] px-3 py-2 text-[14px] text-danger">

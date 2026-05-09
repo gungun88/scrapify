@@ -1,43 +1,149 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowRight } from 'lucide-react'
 import { Composer } from '@/components/composer/Composer'
+import {
+  ConversationCard,
+  aggregateElapsed,
+  inferConversationStatus,
+} from '@/components/conversation/ConversationCard'
+import { useTasks } from '@/hooks/useTasks'
 import { getConversations } from '@/lib/preferences'
-import type { CollectConversation } from '@/lib/types'
+import type { CollectConversation, Task } from '@/lib/types'
+
+const RECENT_LIMIT = 3
 
 export default function HomePage() {
-  const [recents, setRecents] = useState<CollectConversation[]>([])
+  const [conversations, setConversations] = useState<CollectConversation[]>([])
+  const tasksQuery = useTasks()
 
   useEffect(() => {
-    setRecents(getConversations().slice(0, 3))
+    setConversations(getConversations())
   }, [])
 
+  const taskById = useMemo(() => {
+    const m = new Map<string, Task>()
+    for (const t of tasksQuery.data ?? []) m.set(t.id, t)
+    return m
+  }, [tasksQuery.data])
+
+  const enriched = useMemo(
+    () =>
+      conversations.slice(0, RECENT_LIMIT).map((conv) => {
+        const tasks = conv.taskIds.map((id) => taskById.get(id)).filter(Boolean) as Task[]
+        const status = inferConversationStatus(tasks, conv.taskIds.length)
+        const totalItems = tasks
+          .filter((t) => t.status === 'done')
+          .reduce((s, t) => s + t.itemCount, 0)
+        return { conv, status, totalItems, elapsedText: aggregateElapsed(tasks), tasks }
+      }),
+    [conversations, taskById],
+  )
+
+  const hasMore = conversations.length > RECENT_LIMIT
+
   return (
-    <div className="flex min-h-full flex-col">
-      <main className="flex flex-1 items-center justify-center px-6 pb-16 pt-20">
+    // 首页接管整个内容区，套上 .scrapify-dark 后内部组件经由 CSS 变量自动反转配色
+    <div className="scrapify-dark relative isolate flex min-h-full flex-col overflow-hidden bg-bg">
+      {/* 点阵背景：上半屏密、下半屏被光弧覆盖 */}
+      <div
+        aria-hidden="true"
+        className="dot-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_center_top,black_40%,transparent_78%)]"
+      />
+
+      {/* 底部弧形地平线 + 多层漂浮光斑 */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <span className="aurora-arc animate" />
+        <span className="aurora-blob violet animate-a left-[-8%] top-[48%] h-[560px] w-[560px]" />
+        <span className="aurora-blob azure animate-b right-[-6%] top-[52%] h-[520px] w-[520px]" />
+        <span className="aurora-blob magenta animate-c left-[38%] top-[78%] h-[420px] w-[420px]" />
+      </div>
+
+      {/* 横向蓝紫色光带：穿过 Hero 中下部 */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <span className="hero-light-band animate" />
+      </div>
+
+      {/* 径向暗角：边缘收拢，提升中心可读性 */}
+      <div aria-hidden="true" className="hero-vignette" />
+
+      {/* 顶部导航：裸露在背景之上，1440px 容器居中，水平 padding 响应式 */}
+      <header className="relative z-10 mx-auto flex h-20 w-full max-w-[1440px] items-center justify-between gap-4 px-[clamp(16px,5vw,96px)]">
+        <Link href="/" className="flex select-none items-center gap-2 outline-0" aria-label="Scrapify 首页">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-[14px] font-bold text-[#050608]">
+            S
+          </span>
+          <span className="font-display text-[20px] font-semibold tracking-tight text-ink">
+            Scrapify
+          </span>
+          <span className="ml-1 rounded-pill border border-white/15 px-2 py-[2px] text-[11px] font-medium uppercase tracking-wider text-ink-subtle">
+            Beta
+          </span>
+        </Link>
+        <div className="flex items-center gap-2">
+          {/* TODO: 接入实际登录路由 */}
+          <button
+            type="button"
+            className="cursor-pointer rounded-full border-none bg-transparent px-5 py-2.5 text-sm font-medium text-ink-muted transition-colors duration-150 hover:text-ink"
+          >
+            登录
+          </button>
+          {/* TODO: 接入实际注册路由 */}
+          <button
+            type="button"
+            className="cursor-pointer rounded-full border-none bg-white px-6 py-2.5 text-sm font-medium text-[#050608] transition-opacity duration-150 hover:opacity-[0.88]"
+          >
+            注册
+          </button>
+        </div>
+      </header>
+
+      {/* Hero 主区 */}
+      <main className="relative z-10 flex flex-1 items-center justify-center px-6 pb-24 pt-10">
         <div className="w-full max-w-[920px]">
-          <h1 className="mb-8 text-center text-[34px] font-semibold tracking-tight text-ink">
-            告诉我你想采集什么
-          </h1>
+          <div className="mb-12 text-center">
+            <h1 className="font-display text-[64px] leading-[1.05] tracking-tight text-ink md:text-[80px]">
+              用 AI 速度
+              <br />
+              采集独立站
+            </h1>
+            <p className="mx-auto mt-6 max-w-[560px] text-[17px] leading-7 text-ink-muted">
+              粘贴任意商品或目录链接，让结构化数据立刻出现在你面前
+            </p>
+          </div>
 
           <Composer />
 
-          {recents.length > 0 ? (
-            <div className="mt-12">
-              <div className="mb-3 text-center text-[13.5px] font-medium uppercase tracking-wider text-ink-subtle">
-                最近常用
-              </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {recents.map((c) => (
+          {/* 最近采集：紧贴 Composer 下方，最多 3 条卡片，超过显示"更多" */}
+          {enriched.length > 0 ? (
+            <div className="mt-8">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-[12.5px] font-semibold uppercase tracking-wider text-ink-subtle">
+                  最近采集 · {conversations.length}
+                </div>
+                {hasMore ? (
                   <Link
-                    key={c.id}
-                    href={`/c/${c.id}`}
-                    className="inline-flex items-center gap-2 rounded-pill border border-line bg-surface px-3.5 py-1.5 text-[14.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+                    href="/records"
+                    className="inline-flex items-center gap-1 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
                   >
-                    <span>{c.mode === 'catalog' ? '🗂' : '📦'}</span>
-                    <span className="max-w-[200px] truncate">{c.title}</span>
+                    更多
+                    <ArrowRight size={13} />
                   </Link>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                {enriched.map((item) => (
+                  <ConversationCard
+                    key={item.conv.id}
+                    conv={item.conv}
+                    status={item.status}
+                    totalItems={item.totalItems}
+                    elapsedText={item.elapsedText}
+                    tasks={item.tasks}
+                    compact
+                  />
                 ))}
               </div>
             </div>

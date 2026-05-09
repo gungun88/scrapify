@@ -78,7 +78,7 @@ function CompactCatalogLimitPicker({
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-2 w-[420px] max-w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-md border border-line bg-surface shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
+        <div className="absolute left-0 top-full z-50 mt-2 w-[420px] max-w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-md border border-line bg-surface shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
           <CatalogLimitBody value={value} onChange={handlePick} />
         </div>
       ) : null}

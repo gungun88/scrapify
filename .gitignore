@@ -9,6 +9,10 @@ backend/data/runtime.json.bak-*
 *.tsbuildinfo
 .tmp-cettire.html
 
+# 设计参考与进度截图（不应提交，public/brand-icons/ 不受影响）
+scrapify-*.png
+stitch-*.png
+
 .env
 .env.local
 .env.development.local
