@@ -7,7 +7,6 @@ import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { CatalogLimitPicker } from '@/components/ui/CatalogLimitPicker'
 import { PlatformPicker } from '@/components/ui/PlatformPicker'
 import { useSidebarRefresh } from '@/components/layout/SidebarRefreshContext'
-import { useFields } from '@/hooks/useFields'
 import {
   DEFAULT_CATALOG_LIMIT,
   DEFAULT_PLATFORM_ID,
@@ -40,7 +39,6 @@ export function Composer({
 }: ComposerProps) {
   const router = useRouter()
   const bumpSidebar = useSidebarRefresh()
-  const fieldsQuery = useFields()
 
   const [mode, setMode] = useState<CollectMode>('single')
   const [text, setText] = useState('')
@@ -71,11 +69,6 @@ export function Composer({
     el.style.height = 'auto'
     el.style.height = `${Math.min(Math.max(el.scrollHeight, 88), 320)}px`
   }, [text])
-
-  const enabledFieldIds = useMemo(
-    () => (fieldsQuery.data ?? []).filter((f) => f.enabled).map((f) => f.id),
-    [fieldsQuery.data],
-  )
 
   const urlLines = useMemo(
     () =>
@@ -117,31 +110,12 @@ export function Composer({
       setHint({ kind: 'error', text: '请粘贴至少一个 http(s) 链接。' })
       return
     }
-    if (fieldsQuery.isLoading) {
-      setHint({ kind: 'error', text: '字段配置仍在加载，请稍候。' })
-      return
-    }
-    if (fieldsQuery.isError) {
-      setHint({ kind: 'error', text: fieldsQuery.error.message })
-      return
-    }
-    if (enabledFieldIds.length === 0) {
-      setHint({ kind: 'error', text: '当前没有启用的采集字段，请到个人中心配置。' })
-      return
-    }
 
     setSubmitting(true)
     try {
       const taskIds: string[] = []
       for (const url of effectiveUrls) {
-        const body: NewTaskForm = {
-          url,
-          mode: mode === 'catalog' ? 'full' : 'price-only',
-          region: 'auto',
-          fields: enabledFieldIds,
-          concurrency: mode === 'catalog' ? 5 : 3,
-          delay: '1-3s',
-        }
+        const body: NewTaskForm = { url }
         const res = await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -171,7 +145,7 @@ export function Composer({
       setText('')
 
       if (navigateAfterSubmit) {
-        router.push(`/c/${conv.id}`)
+        router.push('/records')
       } else {
         setHint({ kind: 'info', text: `已提交 ${effectiveUrls.length} 个任务。` })
       }
@@ -271,7 +245,7 @@ export function Composer({
                 'inline-flex h-10 items-center gap-1.5 rounded-pill px-6 text-[15px] font-medium transition-all',
                 submitting || effectiveUrls.length === 0
                   ? 'cursor-not-allowed bg-surface-soft text-ink-subtle'
-                  : 'bg-ink text-accent-fg hover:bg-[#1f1f1f]',
+                  : 'bg-white text-[#0a0a0a]',
               )}
             >
               {submitting ? (
@@ -292,16 +266,16 @@ export function Composer({
 
       {/* 模式不匹配软提示：检测到目录/单品链接放错框 */}
       {mismatchedCount > 0 ? (
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#f0c75a]/60 bg-[#fff8d8] px-3 py-2 text-[13.5px] text-ink-muted">
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#f0c75a]/60 bg-[#fff8d8] px-3 py-2 text-[13.5px] text-[#7a5a0e]">
           <span>
-            检测到 <span className="font-semibold text-ink">{mismatchedCount}</span> 行是
-            <span className="font-semibold text-ink">{mode === 'single' ? '目录' : '单品'}</span>
+            检测到 <span className="font-semibold text-[#1f1300]">{mismatchedCount}</span> 行是
+            <span className="font-semibold text-[#1f1300]">{mode === 'single' ? '目录' : '单品'}</span>
             链接，不匹配当前模式
           </span>
           <button
             type="button"
             onClick={() => setMode(mode === 'single' ? 'catalog' : 'single')}
-            className="rounded-pill bg-ink px-2.5 py-0.5 text-[12.5px] font-medium text-accent-fg transition-colors hover:bg-[#1f1f1f]"
+            className="rounded-pill bg-[#1f1300] px-2.5 py-0.5 text-[12.5px] font-medium text-[#fff8d8] transition-colors hover:bg-[#3d2600]"
           >
             切到{mode === 'single' ? '目录' : '单品'}模式
           </button>

@@ -1,9 +1,11 @@
 'use client'
 
+import Image from 'next/image'
+import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useMemo, useState } from 'react'
+import { LogOut } from 'lucide-react'
 import { CatalogLimitPicker } from '@/components/ui/CatalogLimitPicker'
 import { PlatformPicker } from '@/components/ui/PlatformPicker'
-import { useFields, useUpdateFields } from '@/hooks/useFields'
 import { useTasks } from '@/hooks/useTasks'
 import {
   DEFAULT_CATALOG_LIMIT,
@@ -11,31 +13,57 @@ import {
   reconcilePlatform,
 } from '@/lib/mock/platforms'
 import { getConversations, getPreferences, savePreferences } from '@/lib/preferences'
-import type { CollectMode, FieldConfig, UserPreferences } from '@/lib/types'
+import type { CollectMode, UserPreferences } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-type Tab = 'account' | 'preferences' | 'fields' | 'usage'
+type Tab = 'account' | 'preferences' | 'usage'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'account', label: '账户' },
   { key: 'preferences', label: '默认偏好' },
-  { key: 'fields', label: '字段模板' },
   { key: 'usage', label: '使用统计' },
 ]
 
 export default function MePage() {
   const [tab, setTab] = useState<Tab>('preferences')
+  const { data: session } = useSession()
+
+  const userName = session?.user?.name ?? '我'
+  const userEmail = session?.user?.email ?? null
+  const userImage = session?.user?.image ?? null
+  const userInitial = userName.slice(0, 1).toUpperCase()
 
   return (
     <div className="mx-auto w-full max-w-[820px] px-6 py-8">
       <header className="mb-6 flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-[16px] font-semibold text-accent-fg">
-          C
-        </span>
-        <div>
-          <div className="text-[18px] font-semibold tracking-tight text-ink">cooltest</div>
-          <div className="text-[14px] text-ink-subtle">cooltest@example.com · 已加入 30 天</div>
+        {userImage ? (
+          <Image
+            src={userImage}
+            alt={userName}
+            width={40}
+            height={40}
+            className="h-10 w-10 shrink-0 rounded-full"
+          />
+        ) : (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink text-[16px] font-semibold text-accent-fg">
+            {userInitial}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[18px] font-semibold tracking-tight text-ink">{userName}</div>
+          <div className="truncate text-[14px] text-ink-subtle">
+            {userEmail ?? '—'} · 通过 Google 登录
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => void signOut({ callbackUrl: '/login' })}
+          className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-line px-3 text-[13.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+          title="登出"
+        >
+          <LogOut size={13} />
+          登出
+        </button>
       </header>
 
       <nav className="mb-6 flex items-center gap-1 border-b border-line">
@@ -58,7 +86,6 @@ export default function MePage() {
 
       {tab === 'account' && <AccountTab />}
       {tab === 'preferences' && <PreferencesTab />}
-      {tab === 'fields' && <FieldsTab />}
       {tab === 'usage' && <UsageTab />}
     </div>
   )
@@ -66,12 +93,15 @@ export default function MePage() {
 
 /* ====================== 账户 ====================== */
 function AccountTab() {
+  const { data: session } = useSession()
+  const name = session?.user?.name ?? '—'
+  const email = session?.user?.email ?? '—'
+
   return (
     <Section title="账户信息">
-      <Row label="用户名" value="cooltest" />
-      <Row label="邮箱" value="cooltest@example.com" />
-      <Row label="加入时间" value="30 天前" />
-      <Row label="登录方式" value="本地账号" />
+      <Row label="用户名" value={name} />
+      <Row label="邮箱" value={email} />
+      <Row label="登录方式" value="Google" />
     </Section>
   )
 }
@@ -152,92 +182,7 @@ function PreferencesTab() {
 }
 
 /* ====================== 字段模板 ====================== */
-function FieldsTab() {
-  const fieldsQuery = useFields()
-  const updateFields = useUpdateFields()
-  const [draft, setDraft] = useState<FieldConfig[]>([])
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    if (fieldsQuery.data) setDraft(fieldsQuery.data)
-  }, [fieldsQuery.data])
-
-  const dirty = JSON.stringify(draft) !== JSON.stringify(fieldsQuery.data ?? [])
-  const enabledCount = draft.filter((f) => f.enabled).length
-
-  function toggle(id: string) {
-    setDraft((d) => d.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f)))
-  }
-
-  async function handleSave() {
-    await updateFields.mutateAsync(draft)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  return (
-    <Section
-      title="字段模板"
-      desc="选择默认随每次采集下发的字段。改动会同步到所有新任务。"
-    >
-      <div className="mb-4 flex items-center gap-3 text-[14.5px] text-ink-muted">
-        已启用 <span className="font-semibold text-ink">{enabledCount}</span> / {draft.length}
-      </div>
-
-      {fieldsQuery.isLoading ? (
-        <div className="py-8 text-center text-[15px] text-ink-subtle">加载中…</div>
-      ) : fieldsQuery.isError ? (
-        <div className="rounded-md border border-danger/30 bg-[#fff4f4] px-3 py-2 text-[14px] text-danger">
-          {fieldsQuery.error.message}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {draft.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => toggle(f.id)}
-              className={cn(
-                'flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-[15px] transition-colors',
-                f.enabled
-                  ? 'border-line-strong bg-surface text-ink'
-                  : 'border-line bg-surface text-ink-muted hover:bg-surface-soft',
-              )}
-            >
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{f.label}</span>
-                <span className="block truncate font-mono text-[12.5px] text-ink-subtle">
-                  {f.path}
-                </span>
-              </span>
-              <span
-                className={cn(
-                  'shrink-0 rounded-pill px-2 py-0.5 text-[12.5px] font-semibold',
-                  f.enabled ? 'bg-ink text-accent-fg' : 'bg-surface-soft text-ink-subtle',
-                )}
-              >
-                {f.enabled ? '启用' : '关闭'}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-6 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!dirty || updateFields.isPending}
-          className="inline-flex h-9 items-center rounded-pill bg-ink px-5 text-[15px] font-medium text-accent-fg transition-colors hover:bg-[#1f1f1f] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {updateFields.isPending ? '保存中…' : '保存'}
-        </button>
-        {saved ? <span className="text-[14px] text-success">已保存</span> : null}
-        {dirty && !saved ? <span className="text-[14px] text-ink-subtle">有未保存的改动</span> : null}
-      </div>
-    </Section>
-  )
-}
+// 字段模板功能已下线（前端不再选择启用字段，后端总是输出全集）。
 
 /* ====================== 使用统计 ====================== */
 function UsageTab() {

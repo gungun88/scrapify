@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
+import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, LogOut } from 'lucide-react'
 import { Composer } from '@/components/composer/Composer'
 import {
   ConversationCard,
@@ -83,20 +85,7 @@ export default function HomePage() {
           </span>
         </Link>
         <div className="flex items-center gap-2">
-          {/* TODO: 接入实际登录路由 */}
-          <button
-            type="button"
-            className="cursor-pointer rounded-full border-none bg-transparent px-5 py-2.5 text-sm font-medium text-ink-muted transition-colors duration-150 hover:text-ink"
-          >
-            登录
-          </button>
-          {/* TODO: 接入实际注册路由 */}
-          <button
-            type="button"
-            className="cursor-pointer rounded-full border-none bg-white px-6 py-2.5 text-sm font-medium text-[#050608] transition-opacity duration-150 hover:opacity-[0.88]"
-          >
-            注册
-          </button>
+          <UserMenu />
         </div>
       </header>
 
@@ -142,6 +131,7 @@ export default function HomePage() {
                     totalItems={item.totalItems}
                     elapsedText={item.elapsedText}
                     tasks={item.tasks}
+                    href="/records"
                     compact
                   />
                 ))}
@@ -150,6 +140,53 @@ export default function HomePage() {
           ) : null}
         </div>
       </main>
+    </div>
+  )
+}
+
+function UserMenu() {
+  const { data: session, status } = useSession()
+
+  if (status !== 'authenticated' || !session?.user) {
+    return (
+      <Link
+        href="/login"
+        className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-[#050608] transition-opacity hover:opacity-[0.88]"
+      >
+        登录
+      </Link>
+    )
+  }
+
+  const name = session.user.name ?? '我'
+  const image = session.user.image ?? null
+  const initial = name.slice(0, 1).toUpperCase()
+
+  return (
+    <div className="flex items-center gap-2">
+      <Link
+        href="/me"
+        className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+        title={session.user.email ?? undefined}
+      >
+        {image ? (
+          <Image src={image} alt={name} width={22} height={22} className="rounded-full" />
+        ) : (
+          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-white text-[11px] font-bold text-[#050608]">
+            {initial}
+          </span>
+        )}
+        <span className="max-w-[100px] truncate font-medium text-ink">{name}</span>
+      </Link>
+      <button
+        type="button"
+        onClick={() => void signOut({ callbackUrl: '/login' })}
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+        title="登出"
+        aria-label="登出"
+      >
+        <LogOut size={14} />
+      </button>
     </div>
   )
 }

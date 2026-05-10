@@ -104,14 +104,11 @@ docker compose -f docker-compose.dev.yml ps
 
 参见第 0 节的 DATABASE_URL / REDIS_URL 改动。
 
-### 3.3 建表 + 导入历史数据
+### 3.3 建表
 
 ```bash
 npm run db:migrate                # 用 drizzle-kit 跑迁移
-npm run db:migrate-from-json      # 把 backend/data/runtime.json 导入 PG（可选）
 ```
-
-预期最后输出 `[migrate] inserted: tasks=N ...`
 
 ### 3.4 启后端 + 前端
 
@@ -202,13 +199,7 @@ SCRAPIFY_BACKEND_PREFIX=/api
 ```
 然后重启 `npm run dev`。
 
-### Q6：`migrate-from-json` 没找到源文件
-
-> [migrate] no JSON source file found; nothing to migrate.
-
-**说明**：`backend/data/runtime.json` 不存在，从未启过原版 backend。直接跳过即可，loadDatabase() 会用 seed 数据初始化。
-
-### Q7：想从零开始重置整个数据
+### Q6：想从零开始重置整个数据
 
 嵌入式：`npm run db:reset`
 

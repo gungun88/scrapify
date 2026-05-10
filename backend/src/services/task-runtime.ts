@@ -3,11 +3,7 @@ import { formatElapsed } from '../data/seed'
 import type {
   NewTaskForm,
   Task,
-  TaskDetail,
-  TaskFailureDetail,
-  TaskLogEntry,
   TaskResultRow,
-  TaskRunRecord,
   TaskRuntimeRecord,
 } from '../types'
 import { getDatabase, saveDatabase } from './data-store'
@@ -15,19 +11,18 @@ import { extractNextDataPayload } from './runtime-utils'
 
 const TASK_TICK_MS = 3000
 const TASK_QUEUE_DELAY_MS = 1500
-const TASK_WORKER_ID = 'local-worker-1'
 const MAX_ACTIVE_TASKS = 2
 const SHOPIFY_PAGE_LIMIT = 250
 const SHOPIFY_MAX_PAGES = 12
 const REQUEST_TIMEOUT_MS = 15_000
 const RESULT_PREVIEW_LIMIT = 5
-const RUN_HISTORY_LIMIT = 10
-const FAILURE_HISTORY_LIMIT = 10
 const WOOCOMMERCE_PAGE_LIMIT = 100
 const WOOCOMMERCE_MAX_PAGES = 5
 const SITEMAP_MAX_URLS = 25
 const SITEMAP_INDEX_BRANCH_LIMIT = 3
 const PRODUCT_URL_PATTERN = /\/products?\//i
+// 抓取节奏写死，原来由 NewTaskForm.delay 传入，UI 切换后所有任务都走同一档
+const DEFAULT_REQUEST_DELAY_MS = 1500
 
 let taskWorkerTimer: NodeJS.Timeout | null = null
 let taskWorkerBusy = false
@@ -77,77 +72,6 @@ function nowIso(now: number) {
   return new Date(now).toISOString()
 }
 
-export function createTaskLog(level: TaskLogEntry['level'], message: string, atMs = Date.now()): TaskLogEntry {
-  return {
-    id: `log-${randomUUID().slice(0, 8)}`,
-    at: nowIso(atMs),
-    level,
-    message,
-  }
-}
-
-function createFailureDetail(code: string, message: string, atMs: number): TaskFailureDetail {
-  return {
-    at: nowIso(atMs),
-    code,
-    message,
-  }
-}
-
-function createRunRecord(source: string, atMs: number): TaskRunRecord {
-  return {
-    id: `run-${randomUUID().slice(0, 8)}`,
-    source,
-    startedAt: nowIso(atMs),
-    finishedAt: null,
-    status: 'running',
-    itemCount: 0,
-    pageCount: 0,
-    errorMessage: null,
-  }
-}
-
-function getActiveRun(record: TaskRuntimeRecord) {
-  if (!record.activeRunId) {
-    return null
-  }
-
-  return record.runHistory.find((run) => run.id === record.activeRunId) ?? null
-}
-
-function beginTaskRun(record: TaskRuntimeRecord, source: string, atMs: number) {
-  const run = createRunRecord(source, atMs)
-  record.activeRunId = run.id
-  record.runHistory = [run, ...record.runHistory.filter((item) => item.id !== run.id)].slice(0, RUN_HISTORY_LIMIT)
-}
-
-function updateActiveRun(record: TaskRuntimeRecord, patch: Partial<Omit<TaskRunRecord, 'id' | 'source' | 'startedAt'>>) {
-  const run = getActiveRun(record)
-
-  if (!run) {
-    return
-  }
-
-  Object.assign(run, patch)
-}
-
-function updateActiveRunSource(record: TaskRuntimeRecord, source: string) {
-  const run = getActiveRun(record)
-  if (!run) {
-    return
-  }
-
-  run.source = source
-}
-
-function appendLog(record: TaskRuntimeRecord, level: TaskLogEntry['level'], message: string, atMs = Date.now()) {
-  record.logs.push(createTaskLog(level, message, atMs))
-
-  if (record.logs.length > 200) {
-    record.logs = record.logs.slice(-200)
-  }
-}
-
 export function toTask(record: TaskRuntimeRecord): Task {
   return {
     id: record.id,
@@ -160,68 +84,22 @@ export function toTask(record: TaskRuntimeRecord): Task {
   }
 }
 
-export function toTaskDetail(record: TaskRuntimeRecord): TaskDetail {
-  return {
-    ...toTask(record),
-    mode: record.mode,
-    region: record.region,
-    fields: [...record.fields],
-    concurrency: record.concurrency,
-    delay: record.delay,
-    targetCount: record.targetCount,
-    startedAt: record.startedAt,
-    finishedAt: record.finishedAt,
-    errorMessage: record.errorMessage,
-    workerId: record.workerId,
-    lastHeartbeatAt: record.lastHeartbeatAt,
-    result: record.result
-      ? {
-          ...record.result,
-          preview: record.result.preview.map((row) => ({ ...row })),
-        }
-      : null,
-    failureDetails: record.failureDetails.map((detail) => ({ ...detail })),
-    runHistory: record.runHistory.map((run) => ({ ...run })),
-  }
-}
-
-export function estimateTargetCount(form: NewTaskForm) {
-  const fieldMultiplier = Math.max(form.fields.length, 1) * 110
-  const concurrencyMultiplier = form.concurrency * 75
-  const modeBonus = form.mode === 'full' ? 820 : form.mode === 'incremental' ? 520 : 280
-  return modeBonus + fieldMultiplier + concurrencyMultiplier
-}
-
-export function createRuntimeTask(form: NewTaskForm): TaskRuntimeRecord {
+export function createRuntimeTask(form: NewTaskForm, userId: string): TaskRuntimeRecord {
   const now = Date.now()
 
   return {
     id: `task-${randomUUID().slice(0, 8)}`,
+    userId,
     url: form.url.trim(),
     status: 'pending',
     progress: 0,
     itemCount: 0,
     elapsed: '0s',
     createdAt: nowIso(now),
-    mode: form.mode,
-    region: form.region,
-    fields: form.fields,
-    concurrency: form.concurrency,
-    delay: form.delay,
-    targetCount: estimateTargetCount(form),
-    startedAt: null,
-    finishedAt: null,
-    errorMessage: null,
-    workerId: null,
-    lastHeartbeatAt: null,
-    result: null,
-    failureDetails: [],
-    runHistory: [],
     startedAtMs: now,
     updatedAtMs: now,
-    logs: [createTaskLog('info', 'Task queued.', now)],
+    result: null,
     resultItems: [],
-    activeRunId: null,
   }
 }
 
@@ -229,68 +107,34 @@ function resetExecutionState(record: TaskRuntimeRecord, atMs: number) {
   record.progress = 0
   record.itemCount = 0
   record.elapsed = '0s'
-  record.startedAt = null
-  record.finishedAt = null
-  record.errorMessage = null
-  record.workerId = null
-  record.lastHeartbeatAt = null
   record.result = null
   record.resultItems = []
-  record.activeRunId = null
   record.startedAtMs = atMs
   record.updatedAtMs = atMs
 }
 
 function markTaskRunning(record: TaskRuntimeRecord, now: number) {
   record.status = 'running'
-  record.startedAt = nowIso(now)
   record.startedAtMs = now
   record.updatedAtMs = now
   record.elapsed = '0s'
-  record.workerId = TASK_WORKER_ID
-  record.lastHeartbeatAt = nowIso(now)
-  record.errorMessage = null
-  beginTaskRun(record, 'auto-collector', now)
-  appendLog(record, 'info', `Worker ${TASK_WORKER_ID} claimed task.`, now)
+  console.log(`[task ${record.id}] worker claimed task`)
 }
 
 function markTaskDone(record: TaskRuntimeRecord, now: number) {
   record.status = 'done'
   record.progress = 100
   record.itemCount = record.resultItems.length
-  record.targetCount = Math.max(record.resultItems.length, 1)
-  record.finishedAt = nowIso(now)
+  record.updatedAtMs = now
   record.elapsed = formatElapsed(Math.max(0, now - record.startedAtMs))
-  record.workerId = null
-  record.lastHeartbeatAt = nowIso(now)
-  updateActiveRun(record, {
-    status: 'done',
-    finishedAt: record.finishedAt,
-    itemCount: record.itemCount,
-    pageCount: record.result?.pageCount ?? getActiveRun(record)?.pageCount ?? 0,
-    errorMessage: null,
-  })
-  record.activeRunId = null
-  appendLog(record, 'info', 'Task completed.', now)
+  console.log(`[task ${record.id}] completed with ${record.itemCount} item(s)`)
 }
 
-function markTaskError(record: TaskRuntimeRecord, now: number, message: string, code = 'task-error') {
+function markTaskError(record: TaskRuntimeRecord, now: number, message: string) {
   record.status = 'error'
-  record.finishedAt = nowIso(now)
-  record.errorMessage = message
-  record.workerId = null
-  record.lastHeartbeatAt = nowIso(now)
+  record.updatedAtMs = now
   record.elapsed = formatElapsed(Math.max(0, now - record.startedAtMs))
-  record.failureDetails = [createFailureDetail(code, message, now), ...record.failureDetails].slice(0, FAILURE_HISTORY_LIMIT)
-  updateActiveRun(record, {
-    status: 'error',
-    finishedAt: record.finishedAt,
-    itemCount: record.itemCount,
-    pageCount: getActiveRun(record)?.pageCount ?? 0,
-    errorMessage: message,
-  })
-  record.activeRunId = null
-  appendLog(record, 'error', message, now)
+  console.error(`[task ${record.id}] failed: ${message}`)
 }
 
 function updateRunningHeartbeat(record: TaskRuntimeRecord, now: number) {
@@ -299,7 +143,6 @@ function updateRunningHeartbeat(record: TaskRuntimeRecord, now: number) {
   }
 
   const nextElapsed = formatElapsed(Math.max(0, now - record.startedAtMs))
-  const nextHeartbeat = nowIso(now)
   let changed = false
 
   if (record.elapsed !== nextElapsed) {
@@ -307,27 +150,8 @@ function updateRunningHeartbeat(record: TaskRuntimeRecord, now: number) {
     changed = true
   }
 
-  if (record.lastHeartbeatAt !== nextHeartbeat) {
-    record.lastHeartbeatAt = nextHeartbeat
-    changed = true
-  }
-
   record.updatedAtMs = now
   return changed
-}
-
-function parseDelayMs(delay: string) {
-  const rangeMatch = delay.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)s/i)
-  if (rangeMatch) {
-    return Math.max(200, Math.round(Number(rangeMatch[1]) * 1000))
-  }
-
-  const singleMatch = delay.match(/(\d+(?:\.\d+)?)\s*s/i)
-  if (singleMatch) {
-    return Math.max(200, Math.round(Number(singleMatch[1]) * 1000))
-  }
-
-  return 1000
 }
 
 function wait(delayMs: number) {
@@ -595,7 +419,9 @@ function toNumber(value: unknown) {
   return Number.isFinite(numericValue) ? numericValue : null
 }
 
-function mapProductToResult(product: ShopifyProduct, origin: string, fields: string[]): TaskResultRow {
+// 把 9 个产品字段一次性铺到 row 上。row 里 id/handle/url 已经先写入，
+// fieldMap 里的 key 不会和它们冲突，所以可以直接 Object.assign。
+function mapProductToResult(product: ShopifyProduct, origin: string): TaskResultRow {
   const firstVariant = product.variants?.[0]
   const images =
     product.images?.map((image) => image.src).filter((src): src is string => Boolean(src)) ??
@@ -605,13 +431,11 @@ function mapProductToResult(product: ShopifyProduct, origin: string, fields: str
     ? product.variants.reduce((sum, variant) => sum + (typeof variant.inventory_quantity === 'number' ? variant.inventory_quantity : 0), 0)
     : 0
   const handle = typeof product.handle === 'string' ? product.handle : ''
-  const row: TaskResultRow = {
+
+  return {
     id: product.id ? String(product.id) : handle || `product-${randomUUID().slice(0, 8)}`,
     handle,
     url: handle ? `${origin}/products/${handle}` : origin,
-  }
-
-  const fieldMap: Record<string, TaskResultRow[string]> = {
     title: product.title ?? null,
     sku: firstVariant?.sku ?? null,
     price: toNumber(firstVariant?.price),
@@ -622,12 +446,6 @@ function mapProductToResult(product: ShopifyProduct, origin: string, fields: str
     tags,
     vendor: product.vendor ?? null,
   }
-
-  for (const field of fields) {
-    row[field] = fieldMap[field] ?? null
-  }
-
-  return row
 }
 
 async function fetchProductsPage(origin: string, path: string, page: number) {
@@ -835,14 +653,11 @@ function collectFallbackHtmlProducts(html: string, parsedUrl: URL) {
   return exactMatches.length > 0 ? exactMatches : allItems
 }
 
-function mapGenericProductToResult(product: GenericCollectedProduct, fields: string[]): TaskResultRow {
-  const row: TaskResultRow = {
+function mapGenericProductToResult(product: GenericCollectedProduct): TaskResultRow {
+  return {
     id: product.id,
     handle: product.handle || null,
     url: product.url,
-  }
-
-  const fieldMap: Record<string, TaskResultRow[string]> = {
     title: product.title,
     sku: product.sku,
     price: product.price,
@@ -853,12 +668,6 @@ function mapGenericProductToResult(product: GenericCollectedProduct, fields: str
     tags: product.tags,
     vendor: product.vendor,
   }
-
-  for (const field of fields) {
-    row[field] = fieldMap[field] ?? null
-  }
-
-  return row
 }
 
 interface CollectorOutcome {
@@ -917,7 +726,7 @@ function parseWooCommerceMinorUnitPrice(raw: string | number | null | undefined,
   return numeric
 }
 
-function mapWooCommerceProduct(product: WooCommerceProduct, origin: string, fields: string[]): TaskResultRow {
+function mapWooCommerceProduct(product: WooCommerceProduct, origin: string): TaskResultRow {
   const minorUnit = typeof product.prices?.currency_minor_unit === 'number' ? product.prices.currency_minor_unit : 2
   const price = parseWooCommerceMinorUnitPrice(product.prices?.price ?? null, minorUnit)
   const regularPriceValue = parseWooCommerceMinorUnitPrice(product.prices?.regular_price ?? null, minorUnit)
@@ -948,7 +757,7 @@ function mapWooCommerceProduct(product: WooCommerceProduct, origin: string, fiel
     vendor: null,
   })
 
-  return mapGenericProductToResult(generic, fields)
+  return mapGenericProductToResult(generic)
 }
 
 async function fetchWooCommercePage(origin: string, path: string, page: number) {
@@ -1125,6 +934,22 @@ async function discoverSitemapProductUrls(parsedUrl: URL): Promise<string[]> {
   return [...collected].slice(0, SITEMAP_MAX_URLS)
 }
 
+// 把每页抓取后的"更新进度 + 心跳 + 落库"封成一个 helper，
+// 三个 collector 复用，避免上一版那种 6-8 行内联代码重复 3 次。
+async function reportCollectorProgress(
+  record: TaskRuntimeRecord,
+  items: TaskResultRow[],
+  progress: number,
+) {
+  const now = Date.now()
+  record.itemCount = items.length
+  record.progress = Math.min(95, progress)
+  record.resultItems = items
+  record.updatedAtMs = now
+  record.elapsed = formatElapsed(Math.max(0, now - record.startedAtMs))
+  await saveDatabase()
+}
+
 async function tryShopifyCollector(
   record: TaskRuntimeRecord,
   parsedUrl: URL,
@@ -1132,9 +957,6 @@ async function tryShopifyCollector(
 ): Promise<CollectorOutcome> {
   const source = 'shopify-products-json'
   const candidatePaths = buildCandidatePaths(parsedUrl)
-
-  appendLog(record, 'info', `Shopify collector preparing ${candidatePaths.length} endpoint candidate(s).`)
-  await saveDatabase()
 
   let bestItems: TaskResultRow[] = []
   let bestPageCount = 0
@@ -1153,21 +975,19 @@ async function tryShopifyCollector(
         response = await fetchProductsPage(parsedUrl.origin, path, page)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Collector request failed.'
-        appendLog(record, 'warn', `Shopify endpoint failed: ${new URL(path, parsedUrl.origin).pathname} (${message})`)
+        console.warn(`[task ${record.id}] shopify endpoint failed: ${path} (${message})`)
         break
       }
 
       if (response.notFound) {
-        appendLog(record, 'warn', `Shopify endpoint not found: ${new URL(response.endpoint).pathname}`)
         break
       }
 
       const mappedItems = response.products.map((product) =>
-        mapProductToResult(product, parsedUrl.origin, record.fields),
+        mapProductToResult(product, parsedUrl.origin),
       )
 
       if (page === 1 && mappedItems.length === 0) {
-        appendLog(record, 'warn', `Shopify endpoint returned no products: ${new URL(response.endpoint).pathname}`)
         break
       }
 
@@ -1179,21 +999,7 @@ async function tryShopifyCollector(
       pathItems = [...pathItems, ...mappedItems]
       pathPageCount = page
 
-      record.itemCount = pathItems.length
-      record.progress = Math.min(95, 15 + page * 20)
-      record.resultItems = pathItems
-      record.updatedAtMs = Date.now()
-      record.lastHeartbeatAt = nowIso(record.updatedAtMs)
-      record.elapsed = formatElapsed(Math.max(0, record.updatedAtMs - record.startedAtMs))
-
-      updateActiveRun(record, {
-        status: 'running',
-        itemCount: pathItems.length,
-        pageCount: page,
-      })
-
-      appendLog(record, 'info', `Shopify fetched page ${page} with ${mappedItems.length} product(s).`)
-      await saveDatabase()
+      await reportCollectorProgress(record, pathItems, 15 + page * 20)
 
       if (mappedItems.length < SHOPIFY_PAGE_LIMIT) {
         break
@@ -1226,10 +1032,6 @@ async function tryWooCommerceCollector(
   const source = 'woocommerce-store-api'
   const candidatePaths = ['/wp-json/wc/store/v1/products', '/wp-json/wc/store/products']
 
-  appendLog(record, 'info', `WooCommerce collector preparing ${candidatePaths.length} endpoint candidate(s).`)
-  updateActiveRunSource(record, source)
-  await saveDatabase()
-
   let bestItems: TaskResultRow[] = []
   let bestPageCount = 0
   let bestEndpoint: string | null = null
@@ -1247,21 +1049,19 @@ async function tryWooCommerceCollector(
         response = await fetchWooCommercePage(parsedUrl.origin, path, page)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'WooCommerce request failed.'
-        appendLog(record, 'warn', `WooCommerce endpoint failed: ${new URL(path, parsedUrl.origin).pathname} (${message})`)
+        console.warn(`[task ${record.id}] woocommerce endpoint failed: ${path} (${message})`)
         break
       }
 
       if (response.notFound) {
-        appendLog(record, 'warn', `WooCommerce endpoint not found: ${new URL(response.endpoint).pathname}`)
         break
       }
 
       const mappedItems = response.products.map((product) =>
-        mapWooCommerceProduct(product, parsedUrl.origin, record.fields),
+        mapWooCommerceProduct(product, parsedUrl.origin),
       )
 
       if (page === 1 && mappedItems.length === 0) {
-        appendLog(record, 'warn', `WooCommerce endpoint returned no products: ${new URL(response.endpoint).pathname}`)
         break
       }
 
@@ -1273,21 +1073,7 @@ async function tryWooCommerceCollector(
       pathItems = [...pathItems, ...mappedItems]
       pathPageCount = page
 
-      record.itemCount = pathItems.length
-      record.progress = Math.min(95, 20 + page * 18)
-      record.resultItems = pathItems
-      record.updatedAtMs = Date.now()
-      record.lastHeartbeatAt = nowIso(record.updatedAtMs)
-      record.elapsed = formatElapsed(Math.max(0, record.updatedAtMs - record.startedAtMs))
-
-      updateActiveRun(record, {
-        status: 'running',
-        itemCount: pathItems.length,
-        pageCount: page,
-      })
-
-      appendLog(record, 'info', `WooCommerce fetched page ${page} with ${mappedItems.length} product(s).`)
-      await saveDatabase()
+      await reportCollectorProgress(record, pathItems, 20 + page * 18)
 
       if (mappedItems.length < WOOCOMMERCE_PAGE_LIMIT) {
         break
@@ -1319,26 +1105,18 @@ async function trySitemapCollector(
 ): Promise<CollectorOutcome> {
   const source = 'sitemap-html'
 
-  appendLog(record, 'info', 'Sitemap collector starting URL discovery.')
-  updateActiveRunSource(record, source)
-  await saveDatabase()
-
   let productUrls: string[] = []
   try {
     productUrls = await discoverSitemapProductUrls(parsedUrl)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sitemap discovery failed.'
-    appendLog(record, 'warn', `Sitemap discovery failed: ${message}`)
+    console.warn(`[task ${record.id}] sitemap discovery failed: ${message}`)
     return { items: [], pageCount: 0, endpoint: null, source }
   }
 
   if (productUrls.length === 0) {
-    appendLog(record, 'warn', 'Sitemap discovery returned no product URLs.')
     return { items: [], pageCount: 0, endpoint: null, source }
   }
-
-  appendLog(record, 'info', `Sitemap collector queued ${productUrls.length} product URL(s).`)
-  await saveDatabase()
 
   const collected: TaskResultRow[] = []
   const sitemapDelayMs = Math.max(150, Math.round(delayMs / 2))
@@ -1353,7 +1131,7 @@ async function trySitemapCollector(
       lastEndpoint = productUrl
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sitemap product fetch failed.'
-      appendLog(record, 'warn', `Sitemap product fetch failed (${productUrl}): ${message}`)
+      console.warn(`[task ${record.id}] sitemap product fetch failed (${productUrl}): ${message}`)
       continue
     }
 
@@ -1364,35 +1142,13 @@ async function trySitemapCollector(
       continue
     }
 
-    const fallbackItems = collectFallbackHtmlProducts(html, parsedProductUrl).map((item) =>
-      mapGenericProductToResult(item, record.fields),
-    )
+    const fallbackItems = collectFallbackHtmlProducts(html, parsedProductUrl).map(mapGenericProductToResult)
 
     if (fallbackItems.length > 0) {
       collected.push(...fallbackItems)
     }
 
-    record.itemCount = collected.length
-    record.progress = Math.min(95, 20 + Math.floor(((index + 1) / productUrls.length) * 70))
-    record.resultItems = collected
-    record.updatedAtMs = Date.now()
-    record.lastHeartbeatAt = nowIso(record.updatedAtMs)
-    record.elapsed = formatElapsed(Math.max(0, record.updatedAtMs - record.startedAtMs))
-
-    updateActiveRun(record, {
-      status: 'running',
-      itemCount: collected.length,
-      pageCount: index + 1,
-    })
-
-    if ((index + 1) % 5 === 0 || index === productUrls.length - 1) {
-      appendLog(
-        record,
-        'info',
-        `Sitemap progress: ${index + 1}/${productUrls.length} URL(s) processed, ${collected.length} item(s).`,
-      )
-      await saveDatabase()
-    }
+    await reportCollectorProgress(record, collected, 20 + Math.floor(((index + 1) / productUrls.length) * 70))
 
     if (index < productUrls.length - 1) {
       await wait(sitemapDelayMs)
@@ -1414,28 +1170,20 @@ async function tryHtmlFallbackCollector(
 ): Promise<CollectorOutcome> {
   const source = 'html-structured-data'
 
-  appendLog(record, 'info', 'HTML structured-data fallback starting.')
-  updateActiveRunSource(record, source)
-  await saveDatabase()
-
   let html = ''
   try {
     html = await fetchHtmlPage(parsedUrl.toString())
   } catch (error) {
     const message = error instanceof Error ? error.message : 'HTML fallback fetch failed.'
-    appendLog(record, 'warn', `HTML fallback fetch failed: ${message}`)
+    console.warn(`[task ${record.id}] html fallback fetch failed: ${message}`)
     return { items: [], pageCount: 0, endpoint: null, source }
   }
 
-  const items = collectFallbackHtmlProducts(html, parsedUrl).map((item) =>
-    mapGenericProductToResult(item, record.fields),
-  )
+  const items = collectFallbackHtmlProducts(html, parsedUrl).map(mapGenericProductToResult)
 
   if (items.length === 0) {
     return { items: [], pageCount: 0, endpoint: parsedUrl.toString(), source }
   }
-
-  appendLog(record, 'info', `HTML fallback collected ${items.length} item(s).`)
 
   return {
     items,
@@ -1456,14 +1204,7 @@ async function executeTask(taskId: string) {
 
   try {
     const parsedUrl = normalizeTaskUrl(record.url)
-    const delayMs = parseDelayMs(record.delay)
-
-    appendLog(
-      record,
-      'info',
-      'Collector pipeline ready: shopify-products-json -> woocommerce-store-api -> sitemap-html -> html-structured-data.',
-    )
-    await saveDatabase()
+    const delayMs = DEFAULT_REQUEST_DELAY_MS
 
     const collectors: Array<
       (record: TaskRuntimeRecord, parsedUrl: URL, delayMs: number) => Promise<CollectorOutcome>
@@ -1495,21 +1236,10 @@ async function executeTask(taskId: string) {
       preview: outcome.items.slice(0, RESULT_PREVIEW_LIMIT).map((row) => ({ ...row })),
     }
 
-    updateActiveRun(record, {
-      status: 'running',
-      itemCount: outcome.items.length,
-      pageCount: Math.max(outcome.pageCount, 1),
-    })
-    updateActiveRunSource(record, outcome.source)
-
-    if (outcome.endpoint) {
-      appendLog(record, 'info', `Collector completed via ${outcome.endpoint}.`)
-    }
-
     markTaskDone(record, Date.now())
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Task execution failed.'
-    markTaskError(record, Date.now(), message, 'collector-error')
+    markTaskError(record, Date.now(), message)
   } finally {
     activeExecutions.delete(taskId)
     await saveDatabase()
@@ -1532,7 +1262,7 @@ async function tickTaskWorker() {
       changed = updateRunningHeartbeat(task, now) || changed
 
       if (task.status === 'running' && !activeExecutions.has(task.id)) {
-        appendLog(task, 'warn', 'Recovered running task after worker restart; restarting from the beginning.', now)
+        console.warn(`[task ${task.id}] recovered after worker restart, restarting from the beginning`)
         resetExecutionState(task, now)
         markTaskRunning(task, now)
         activeExecutions.set(task.id, executeTask(task.id))
@@ -1578,7 +1308,6 @@ export function startTaskWorker() {
   taskWorkerTimer = setInterval(() => {
     void tickTaskWorker()
   }, TASK_TICK_MS)
-  taskWorkerTimer.unref?.()
 }
 
 export function stopTaskWorker() {
@@ -1588,70 +1317,4 @@ export function stopTaskWorker() {
 
   clearInterval(taskWorkerTimer)
   taskWorkerTimer = null
-}
-
-export function applyTaskPatch(record: TaskRuntimeRecord, patch: Partial<TaskDetail>) {
-  const now = Date.now()
-  let changed = false
-
-  if (typeof patch.url === 'string' && patch.url !== record.url) {
-    record.url = patch.url
-    changed = true
-  }
-
-  if (typeof patch.progress === 'number') {
-    const nextProgress = Math.max(0, Math.min(100, patch.progress))
-
-    if (nextProgress !== record.progress) {
-      record.progress = nextProgress
-      changed = true
-    }
-  }
-
-  if (typeof patch.itemCount === 'number') {
-    const nextCount = Math.max(0, patch.itemCount)
-
-    if (nextCount !== record.itemCount) {
-      record.itemCount = nextCount
-      changed = true
-    }
-  }
-
-  if (typeof patch.elapsed === 'string' && patch.elapsed !== record.elapsed) {
-    record.elapsed = patch.elapsed
-    changed = true
-  }
-
-  if (typeof patch.errorMessage === 'string' || patch.errorMessage === null) {
-    record.errorMessage = patch.errorMessage
-    changed = true
-  }
-
-  if (typeof patch.status === 'string' && patch.status !== record.status) {
-    if (patch.status === 'running') {
-      resetExecutionState(record, now)
-      markTaskRunning(record, now)
-    } else if (patch.status === 'done') {
-      markTaskDone(record, now)
-    } else if (patch.status === 'error') {
-      markTaskError(record, now, patch.errorMessage || 'Task marked as failed manually.', 'manual-error')
-    } else if (patch.status === 'pending') {
-      record.status = 'pending'
-      resetExecutionState(record, now)
-      appendLog(record, 'warn', 'Task moved back to pending.', now)
-    }
-
-    changed = true
-  }
-
-  if (record.status === 'done') {
-    record.progress = 100
-    record.itemCount = Math.max(record.itemCount, record.targetCount)
-  }
-
-  if (changed) {
-    record.updatedAtMs = now
-  }
-
-  return changed
 }

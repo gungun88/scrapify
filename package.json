@@ -19,7 +19,6 @@
     "db:generate": "drizzle-kit generate --config backend/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config backend/drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config backend/drizzle.config.ts",
-    "db:migrate-from-json": "tsx backend/scripts/migrate-from-json.ts",
     "db:reset": "node -e \"const fs=require('fs'); fs.rmSync('.dev-pg-data',{recursive:true,force:true}); console.log('removed .dev-pg-data')\"",
     "infra:up": "docker compose -f docker-compose.dev.yml up -d",
     "infra:down": "docker compose -f docker-compose.dev.yml down"
@@ -29,7 +28,6 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/rate-limit": "^10.3.0",
     "@tanstack/react-query": "^5.76.2",
-    "@tanstack/react-table": "^8.21.3",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.36.4",
@@ -38,13 +36,12 @@
     "ioredis-mock": "^8.13.1",
     "lucide-react": "^0.511.0",
     "next": "^14.2.28",
+    "next-auth": "^5.0.0-beta.31",
     "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^3.8.1",
     "simple-icons": "^16.18.1",
     "tailwind-merge": "^3.3.0",
-    "tsx": "^4.21.0",
     "zustand": "^5.0.4"
   },
   "devDependencies": {

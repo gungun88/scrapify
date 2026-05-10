@@ -4,9 +4,10 @@ import rateLimit from '@fastify/rate-limit'
 import Fastify from 'fastify'
 import { backendConfig } from './config'
 import { closeDbConnections, getRedis, initDb } from './db/client'
-import { registerFieldRoutes } from './routes/fields'
+import { requireUser } from './middleware/require-user'
 import { registerHealthRoutes } from './routes/health'
 import { registerTaskRoutes } from './routes/tasks'
+import { registerUserRoutes } from './routes/users'
 import { loadDatabase } from './services/data-store'
 import { startTaskWorker } from './services/task-runtime'
 
@@ -32,9 +33,12 @@ async function createServer() {
     },
   })
 
+  // 全局鉴权 hook：/api/health 公开放行（hook 内部判断），其余 endpoint 必须带签名
+  app.addHook('preHandler', requireUser)
+
   await registerHealthRoutes(app)
+  await registerUserRoutes(app)
   await registerTaskRoutes(app)
-  await registerFieldRoutes(app)
 
   return app
 }

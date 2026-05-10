@@ -4,6 +4,12 @@ const nextConfig = {
   experimental: {
     webpackBuildWorker: false,
   },
+  images: {
+    remotePatterns: [
+      // Google OAuth 头像 CDN
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+    ],
+  },
 }
 
 export default nextConfig

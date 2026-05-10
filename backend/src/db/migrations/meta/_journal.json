@@ -15,6 +15,20 @@
       "when": 1778035359499,
       "tag": "0001_curvy_kitty_pryde",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778385354986,
+      "tag": "0002_lovely_moonstone",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778439715174,
+      "tag": "0003_youthful_gauntlet",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { getDatabase, saveDatabase } from '../services/data-store'
-import { applyTaskPatch, createRuntimeTask, toTask, toTaskDetail } from '../services/task-runtime'
-import type { NewTaskForm, TaskDetail, TaskResultRow, TaskRuntimeRecord } from '../types'
+import { createRuntimeTask, toTask } from '../services/task-runtime'
+import type { DatabaseShape, NewTaskForm, TaskResultRow, TaskRuntimeRecord } from '../types'
 
 type TaskExportFormat = 'csv' | 'json'
 
@@ -12,49 +12,45 @@ function isValidNewTaskForm(body: unknown): body is NewTaskForm {
 
   const value = body as Record<string, unknown>
 
-  return (
-    typeof value.url === 'string' &&
-    typeof value.mode === 'string' &&
-    typeof value.region === 'string' &&
-    Array.isArray(value.fields) &&
-    typeof value.concurrency === 'number' &&
-    typeof value.delay === 'string'
-  )
+  return typeof value.url === 'string'
+}
+
+function findUserTask(db: DatabaseShape, userId: string, taskId: string) {
+  return db.tasks.find((task) => task.id === taskId && task.userId === userId)
+}
+
+function userIdOf(request: FastifyRequest): string {
+  if (!request.user) {
+    throw new Error('requireUser hook did not run before tasks route')
+  }
+  return request.user.id
 }
 
 export async function registerTaskRoutes(app: FastifyInstance) {
-  app.get('/api/tasks', async (_request, reply) => {
+  app.get('/api/tasks', async (request, reply) => {
+    const userId = userIdOf(request)
     const db = await getDatabase()
-    return reply.send(db.tasks.map(toTask))
+    return reply.send(db.tasks.filter((task) => task.userId === userId).map(toTask))
   })
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) => {
+    const userId = userIdOf(request)
     const db = await getDatabase()
-    const task = db.tasks.find((item) => item.id === request.params.id)
+    const task = findUserTask(db, userId, request.params.id)
 
     if (!task) {
       return reply.status(404).send({ message: 'Task not found' })
     }
 
-    return reply.send(toTaskDetail(task))
-  })
-
-  app.get<{ Params: { id: string } }>('/api/tasks/:id/logs', async (request, reply) => {
-    const db = await getDatabase()
-    const task = db.tasks.find((item) => item.id === request.params.id)
-
-    if (!task) {
-      return reply.status(404).send({ message: 'Task not found' })
-    }
-
-    return reply.send(task.logs)
+    return reply.send(toTask(task))
   })
 
   app.get<{ Params: { id: string }; Querystring: { format?: string } }>(
     '/api/tasks/:id/export',
     async (request, reply) => {
+      const userId = userIdOf(request)
       const db = await getDatabase()
-      const task = db.tasks.find((item) => item.id === request.params.id)
+      const task = findUserTask(db, userId, request.params.id)
 
       if (!task) {
         return reply.status(404).send({ message: 'Task not found' })
@@ -99,7 +95,7 @@ export async function registerTaskRoutes(app: FastifyInstance) {
 
       const csv = buildShopifyCsvContent(rows)
       reply.type('text/csv; charset=utf-8')
-      return reply.send(`\uFEFF${csv}`)
+      return reply.send(`﻿${csv}`)
     },
   )
 
@@ -112,29 +108,13 @@ export async function registerTaskRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: 'Task URL is required' })
     }
 
+    const userId = userIdOf(request)
     const db = await getDatabase()
-    const task = createRuntimeTask(request.body)
+    const task = createRuntimeTask(request.body, userId)
     db.tasks.unshift(task)
     await saveDatabase()
 
     return reply.status(201).send(toTask(task))
-  })
-
-  app.patch<{ Params: { id: string }; Body: Partial<TaskDetail> }>('/api/tasks/:id', async (request, reply) => {
-    const db = await getDatabase()
-    const task = db.tasks.find((item) => item.id === request.params.id)
-
-    if (!task) {
-      return reply.status(404).send({ message: 'Task not found' })
-    }
-
-    const changed = applyTaskPatch(task, request.body || {})
-
-    if (changed) {
-      await saveDatabase()
-    }
-
-    return reply.send(toTaskDetail(task))
   })
 }
 
@@ -172,7 +152,8 @@ function buildTaskExportFilename(task: TaskRuntimeRecord, format: TaskExportForm
 }
 
 // Shopify Admin → Products → Export 用的 CSV 模板列头（顺序固定，不能变）。
-// 任何不能从采集结果填出的列都输出空字符串。
+// 按 products_export.csv（85 列）严格对齐，含 28 个 metafields 自定义列。
+// 这些 metafields 列采集填不出，全部输出空字符串。
 const SHOPIFY_CSV_COLUMNS: readonly string[] = [
   'Handle',
   'Title',
@@ -223,6 +204,34 @@ const SHOPIFY_CSV_COLUMNS: readonly string[] = [
   'Google Shopping / Custom Label 2',
   'Google Shopping / Custom Label 3',
   'Google Shopping / Custom Label 4',
+  'Material (product.metafields.custom.material)',
+  'shippingLabel (product.metafields.custom.shippinglabel)',
+  'EComposer product countdown end at (product.metafields.ecomposer.countdown)',
+  'EComposer product countdown start at (product.metafields.ecomposer.countdown_from)',
+  'product_highlights (product.metafields.google_feed.product_highlights)',
+  'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)',
+  'Product rating count (product.metafields.reviews.rating_count)',
+  'Backrest type (product.metafields.shopify.backrest-type)',
+  'Color (product.metafields.shopify.color-pattern)',
+  'Door glass finish (product.metafields.shopify.door-glass-finish)',
+  'Door material (product.metafields.shopify.door-material)',
+  'Features (product.metafields.shopify.features)',
+  'Furniture/Fixture features (product.metafields.shopify.furniture-fixture-features)',
+  'Furniture/Fixture material (product.metafields.shopify.furniture-fixture-material)',
+  'Hardware material (product.metafields.shopify.hardware-material)',
+  'Leg color (product.metafields.shopify.leg-color)',
+  'Leg material (product.metafields.shopify.leg-material)',
+  'Mounting type (product.metafields.shopify.mounting-type)',
+  'Seat type (product.metafields.shopify.seat-type)',
+  'Style (product.metafields.shopify.style)',
+  'Suitable location (product.metafields.shopify.suitable-location)',
+  'Tabletop color (product.metafields.shopify.tabletop-color)',
+  'Tabletop material (product.metafields.shopify.tabletop-material)',
+  'Tabletop shape (product.metafields.shopify.tabletop-shape)',
+  'Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products)',
+  'Related products (product.metafields.shopify--discovery--product_recommendation.related_products)',
+  'Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display)',
+  'Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries)',
   'Variant Image',
   'Variant Weight Unit',
   'Variant Tax Code',
@@ -386,22 +395,6 @@ function buildShopifyCsvContent(rows: TaskResultRow[]) {
   }
 
   return lines.join('\n')
-}
-
-function formatCsvCell(value: TaskResultRow[string]) {
-  if (Array.isArray(value)) {
-    return value.join(' | ')
-  }
-
-  if (value === null || value === undefined) {
-    return ''
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? 'true' : 'false'
-  }
-
-  return String(value)
 }
 
 function escapeCsvValue(value: string) {

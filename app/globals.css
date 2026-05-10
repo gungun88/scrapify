@@ -243,6 +243,25 @@ textarea {
   .aurora-arc.animate { animation: none; }
 }
 
+/* —— 浅色点阵背景：用于 records 等"接管视口"的浮窗布局页面 —— */
+.dot-grid-light {
+  background-color: #f4f5f7;
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.10) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+  background-position: center top;
+}
+
+/* —— 玻璃浮窗面板：白色半透明 + backdrop-blur + 极淡边框 + 柔和阴影 —— */
+.glass-panel {
+  background-color: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 8px 30px -12px rgba(15, 18, 28, 0.12);
+}
+
 /* 平台选择 popover：深色场景下用纯色背景，避免下层"最近采集" chip 透过半透明 surface 漏出 */
 .scrapify-dark .composer-card .absolute.z-50 {
   background-color: #0e1015;

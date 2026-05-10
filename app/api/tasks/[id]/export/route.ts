@@ -1,4 +1,4 @@
-import { getBackendUnavailableResponse, proxyBackendRequest } from '@/lib/server/backend'
+import { proxyAuthenticated } from '@/lib/server/auth-proxy'
 
 interface RouteContext {
   params: {
@@ -7,15 +7,9 @@ interface RouteContext {
 }
 
 export async function GET(request: Request, { params }: RouteContext) {
-  const proxied = await proxyBackendRequest({
+  return proxyAuthenticated({
     path: `/tasks/${params.id}/export`,
     search: new URL(request.url).search,
     raw: true,
   })
-
-  if (proxied) {
-    return proxied
-  }
-
-  return getBackendUnavailableResponse()
 }

@@ -91,20 +91,6 @@ export const SINGLE_PLATFORM_GROUPS: PlatformGroup[] = [
       { id: 'opencart', label: 'OpenCart', icon: 'opencart' },
     ],
   },
-  {
-    id: 'other',
-    label: '其它',
-    options: [
-      { id: 'shopmatrix-anti', label: '店匠反爬' },
-      { id: 'shopmatrix-block', label: '店匠屏蔽' },
-      { id: 'shopify-anti', label: 'shopify反爬' },
-      { id: 'shopline-anti', label: 'shopline反爬' },
-      { id: 'spl-block', label: 'SPL屏蔽' },
-      { id: 'oem-anti', label: 'OEM反爬' },
-      { id: 'xshoppy-anti', label: 'Xshoppy反爬' },
-      { id: 'shoplus-anti', label: 'SHOPLUS反爬' },
-    ],
-  },
 ]
 
 /* ============================================================
@@ -148,20 +134,6 @@ export const CATALOG_PLATFORM_GROUPS: PlatformGroup[] = [
       { id: 'wp', label: 'WP', icon: 'wp' },
       { id: 'zencart', label: 'ZenCart', icon: 'zencart' },
       { id: 'opencart', label: 'OpenCart', icon: 'opencart' },
-    ],
-  },
-  {
-    id: 'other',
-    label: '其它',
-    options: [
-      { id: 'shopmatrix-anti', label: '店匠反爬' },
-      { id: 'shopmatrix-block', label: '店匠屏蔽' },
-      { id: 'shopify-anti', label: 'shopify反爬' },
-      { id: 'shopline-anti', label: 'shopline反爬' },
-      { id: 'spl-block', label: 'SPL屏蔽' },
-      { id: 'oem-anti', label: 'OEM反爬' },
-      { id: 'xshoppy-anti', label: 'Xshoppy反爬' },
-      { id: 'shoplus-anti', label: 'SHOPLUS反爬' },
     ],
   },
 ]

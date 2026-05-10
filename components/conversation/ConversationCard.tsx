@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ExternalLink, Trash2, Download } from 'lucide-react'
 import { StatusBadge } from '@/components/layout/Sidebar'
 import { getPlatformBreadcrumb } from '@/lib/mock/platforms'
@@ -33,6 +35,8 @@ interface ConversationCardProps {
   compact?: boolean
   /** framed: 是否渲染外框；放进列表容器时设 false 由外层统一 border + divide-y */
   framed?: boolean
+  /** 覆盖整行点击目标，默认指向 /records */
+  href?: string
 }
 
 const TYPE_LABEL: Record<CollectConversation['mode'], string> = {
@@ -49,9 +53,11 @@ export function ConversationCard({
   onDelete,
   compact,
   framed = true,
+  href,
 }: ConversationCardProps) {
   const target = tasks.find((t) => t.status === 'done') ?? tasks[0]
   const exportHref = target ? `/api/tasks/${target.id}/export?format=csv` : undefined
+  const rowHref = href ?? '/records'
 
   return (
     <div
@@ -78,7 +84,7 @@ export function ConversationCard({
 
       {/* 任务名称：通过 ::before 把可点击区域扩展到整行（card-link 模式） */}
       <Link
-        href={`/c/${conv.id}`}
+        href={rowHref}
         className={cn(
           ROW_COLS.title,
           'truncate font-medium text-ink hover:underline',
@@ -121,14 +127,7 @@ export function ConversationCard({
       {/* 操作（链接 | 删除 | 导出）—— compact 模式隐藏。relative z-10 让按钮浮在整行 ::before 链接覆盖层之上，保持可点击 */}
       {!compact ? (
         <div className={cn(ROW_COLS.actions, 'relative z-10 flex items-center justify-end gap-0.5')}>
-          <Link
-            href={`/c/${conv.id}`}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-surface-soft hover:text-ink"
-            aria-label="打开"
-            title="打开"
-          >
-            <ExternalLink size={14} />
-          </Link>
+          <OpenSourceUrlAction urls={conv.urls} />
           {exportHref ? (
             <a
               href={exportHref}
@@ -210,4 +209,160 @@ export function inferConversationStatus(tasks: Task[], total: number): TaskStatu
   if (tasks.every((t) => t.status === 'done')) return 'done'
   if (tasks.some((t) => t.status === 'error')) return 'error'
   return 'pending'
+}
+
+/* ---------------- 子组件：打开采集源链接 ---------------- */
+
+/**
+ * 单链接：直接渲染外链 <a>。
+ * 多链接：渲染按钮 + 角标计数 + 点击展开下拉，列出所有 URL，每条独立打开。
+ *
+ * 下拉用 createPortal 渲染到 body：因为 records 页 .glass-panel 设置了 backdrop-filter，
+ * 它会创建 fixed 的 containing block，导致 position: fixed 也被 overflow 裁切。
+ */
+function OpenSourceUrlAction({ urls }: { urls: string[] }) {
+  const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (!open) return
+    function recompute() {
+      const r = buttonRef.current?.getBoundingClientRect()
+      if (r) setRect(r)
+    }
+    window.addEventListener('resize', recompute)
+    // 捕获阶段监听，覆盖任意祖先的滚动容器
+    window.addEventListener('scroll', recompute, true)
+    return () => {
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll', recompute, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    function onPointer(e: PointerEvent) {
+      const target = e.target as Node
+      if (buttonRef.current?.contains(target)) return
+      if (popoverRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  function toggle() {
+    setOpen((prev) => {
+      const next = !prev
+      if (next) {
+        const r = buttonRef.current?.getBoundingClientRect()
+        if (r) setRect(r)
+      }
+      return next
+    })
+  }
+
+  if (urls.length === 0) {
+    return (
+      <span
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-subtle/40"
+        title="无可打开链接"
+      >
+        <ExternalLink size={14} />
+      </span>
+    )
+  }
+
+  if (urls.length === 1) {
+    return (
+      <a
+        href={urls[0]}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-surface-soft hover:text-ink"
+        aria-label="打开采集链接"
+        title={urls[0]}
+      >
+        <ExternalLink size={14} />
+      </a>
+    )
+  }
+
+  const popover =
+    mounted && open && rect
+      ? createPortal(
+          <div
+            ref={popoverRef}
+            role="menu"
+            className="fixed z-50 w-[320px] overflow-hidden rounded-md border border-line bg-surface shadow-lg"
+            style={{
+              top: rect.bottom + 4,
+              // 右对齐到按钮右沿：用 left 而不是 right，避免依赖 window.innerWidth 在不同 DPR 下的奇怪
+              left: Math.max(8, rect.right - 320),
+            }}
+          >
+            <div className="border-b border-line/60 bg-surface-soft/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+              采集链接 · {urls.length}
+            </div>
+            <ul className="max-h-[280px] overflow-y-auto py-1">
+              {urls.map((u, i) => (
+                <li key={`${i}-${u}`}>
+                  <a
+                    href={u}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    role="menuitem"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink"
+                    title={u}
+                  >
+                    <span className="w-5 shrink-0 text-right tabular-nums text-ink-subtle">
+                      {i + 1}.
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{u}</span>
+                    <ExternalLink size={11} className="shrink-0 text-ink-subtle" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        )
+      : null
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={toggle}
+        className="relative inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-surface-soft hover:text-ink"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`打开采集链接（共 ${urls.length} 条）`}
+        title={`共 ${urls.length} 条链接`}
+      >
+        <ExternalLink size={14} />
+        <span
+          aria-hidden="true"
+          className="absolute -right-0.5 -top-0.5 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-ink px-1 text-[9px] font-semibold leading-none text-accent-fg"
+        >
+          {urls.length > 99 ? '99+' : urls.length}
+        </span>
+      </button>
+      {popover}
+    </>
+  )
 }

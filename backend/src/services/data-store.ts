@@ -1,20 +1,6 @@
-import { createSeedDatabase } from '../data/seed'
 import { getDb } from '../db/client'
-import {
-  fieldConfigs as fieldConfigsTable,
-  tasks as tasksTable,
-} from '../db/schema'
-import type {
-  DatabaseShape,
-  FieldConfig,
-  FieldType,
-  TaskFailureDetail,
-  TaskLogEntry,
-  TaskResultRow,
-  TaskResultSummary,
-  TaskRunRecord,
-  TaskRuntimeRecord,
-} from '../types'
+import { tasks as tasksTable } from '../db/schema'
+import type { DatabaseShape, TaskResultRow, TaskResultSummary, TaskRuntimeRecord } from '../types'
 
 let state: DatabaseShape | null = null
 
@@ -23,54 +9,6 @@ let state: DatabaseShape | null = null
 // 避免高频 heartbeat 触发的 N 次 truncate+insert。
 let saveInFlight: Promise<void> | null = null
 let savePending = false
-
-function createMigratedLog(level: TaskLogEntry['level'], message: string, atMs: number): TaskLogEntry {
-  return {
-    id: `log-migrated-${atMs}-${Math.random().toString(16).slice(2, 8)}`,
-    at: new Date(atMs).toISOString(),
-    level,
-    message,
-  }
-}
-
-function normalizeTaskLogs(task: Partial<TaskRuntimeRecord>, now: number): TaskLogEntry[] {
-  if (Array.isArray(task.logs)) {
-    return task.logs
-      .filter(
-        (log): log is TaskLogEntry =>
-          Boolean(log && typeof log.message === 'string' && typeof log.at === 'string'),
-      )
-      .map((log, index) => ({
-        id: typeof log.id === 'string' ? log.id : `log-migrated-${index}`,
-        at: log.at,
-        level: log.level === 'warn' || log.level === 'error' ? log.level : 'info',
-        message: log.message,
-      }))
-  }
-
-  const createdAtMs = Date.parse(task.createdAt || '') || now
-  const logs: TaskLogEntry[] = [createMigratedLog('info', 'Task queued.', createdAtMs)]
-
-  if (task.status === 'running' || task.status === 'done' || task.status === 'error') {
-    logs.push(createMigratedLog('info', 'Worker claimed task.', task.startedAtMs || createdAtMs))
-  }
-
-  if (task.status === 'done') {
-    logs.push(createMigratedLog('info', 'Task completed.', task.updatedAtMs || now))
-  }
-
-  if (task.status === 'error') {
-    logs.push(
-      createMigratedLog(
-        'error',
-        task.errorMessage || 'Task failed during execution.',
-        task.updatedAtMs || now,
-      ),
-    )
-  }
-
-  return logs
-}
 
 function normalizeResultRow(row: unknown): TaskResultRow | null {
   if (!row || typeof row !== 'object' || Array.isArray(row)) {
@@ -97,68 +35,13 @@ function normalizeResultRow(row: unknown): TaskResultRow | null {
   return Object.keys(normalized).length > 0 ? normalized : null
 }
 
-function normalizeFailureDetail(detail: unknown): TaskFailureDetail | null {
-  if (!detail || typeof detail !== 'object') {
-    return null
-  }
-
-  const value = detail as Partial<TaskFailureDetail>
-
-  if (typeof value.at !== 'string' || typeof value.message !== 'string') {
-    return null
-  }
-
-  return {
-    at: value.at,
-    code: typeof value.code === 'string' ? value.code : 'task-error',
-    message: value.message,
-  }
-}
-
-function normalizeRunRecord(run: unknown, index: number): TaskRunRecord | null {
-  if (!run || typeof run !== 'object') {
-    return null
-  }
-
-  const value = run as Partial<TaskRunRecord>
-
-  if (typeof value.startedAt !== 'string') {
-    return null
-  }
-
-  return {
-    id: typeof value.id === 'string' ? value.id : `run-migrated-${index}`,
-    source: typeof value.source === 'string' ? value.source : 'legacy-runtime',
-    startedAt: value.startedAt,
-    finishedAt: typeof value.finishedAt === 'string' ? value.finishedAt : null,
-    status:
-      value.status === 'pending' ||
-      value.status === 'running' ||
-      value.status === 'done' ||
-      value.status === 'error'
-        ? value.status
-        : 'done',
-    itemCount: typeof value.itemCount === 'number' ? value.itemCount : 0,
-    pageCount: typeof value.pageCount === 'number' ? value.pageCount : 0,
-    errorMessage: typeof value.errorMessage === 'string' ? value.errorMessage : null,
-  }
-}
-
-export function normalizeTaskRecord(task: Partial<TaskRuntimeRecord>, now: number): TaskRuntimeRecord {
+export function normalizeTaskRecord(
+  task: Partial<TaskRuntimeRecord>,
+  now: number,
+  userId: string,
+): TaskRuntimeRecord {
   const createdAtMs = Date.parse(task.createdAt || '') || now
   const startedAtMs = typeof task.startedAtMs === 'number' ? task.startedAtMs : createdAtMs
-  const startedAt =
-    typeof task.startedAt === 'string'
-      ? task.startedAt
-      : task.status === 'running' || task.status === 'done' || task.status === 'error'
-        ? new Date(startedAtMs).toISOString()
-        : null
-  const finishedAt =
-    typeof task.finishedAt === 'string'
-      ? task.finishedAt
-      : task.status === 'done' || task.status === 'error'
-        ? new Date(typeof task.updatedAtMs === 'number' ? task.updatedAtMs : now).toISOString()
-        : null
   const resultPreview = Array.isArray(task.result?.preview)
     ? task.result.preview.map(normalizeResultRow).filter((row): row is TaskResultRow => row !== null)
     : []
@@ -177,6 +60,7 @@ export function normalizeTaskRecord(task: Partial<TaskRuntimeRecord>, now: numbe
 
   return {
     id: typeof task.id === 'string' ? task.id : `task-migrated-${now}`,
+    userId,
     url: typeof task.url === 'string' ? task.url : '',
     status:
       task.status === 'running' || task.status === 'done' || task.status === 'error'
@@ -186,53 +70,12 @@ export function normalizeTaskRecord(task: Partial<TaskRuntimeRecord>, now: numbe
     itemCount: typeof task.itemCount === 'number' ? task.itemCount : 0,
     elapsed: typeof task.elapsed === 'string' && task.elapsed.trim() ? task.elapsed : '0s',
     createdAt: typeof task.createdAt === 'string' ? task.createdAt : new Date(createdAtMs).toISOString(),
-    mode: task.mode === 'incremental' || task.mode === 'price-only' ? task.mode : 'full',
-    region: typeof task.region === 'string' ? task.region : 'auto',
-    fields: Array.isArray(task.fields)
-      ? task.fields.filter((field): field is string => typeof field === 'string')
-      : [],
-    concurrency: typeof task.concurrency === 'number' ? task.concurrency : 1,
-    delay: typeof task.delay === 'string' ? task.delay : '1-3s',
-    targetCount:
-      typeof task.targetCount === 'number'
-        ? task.targetCount
-        : Math.max(typeof task.itemCount === 'number' ? task.itemCount : 0, 100),
-    startedAt,
-    finishedAt,
-    errorMessage:
-      typeof task.errorMessage === 'string'
-        ? task.errorMessage
-        : task.status === 'error'
-          ? 'Task failed before error details were persisted.'
-          : null,
-    workerId:
-      typeof task.workerId === 'string'
-        ? task.workerId
-        : task.status === 'running'
-          ? 'local-worker-1'
-          : null,
-    lastHeartbeatAt:
-      typeof task.lastHeartbeatAt === 'string'
-        ? task.lastHeartbeatAt
-        : task.status === 'running' || task.status === 'done' || task.status === 'error'
-          ? new Date(typeof task.updatedAtMs === 'number' ? task.updatedAtMs : now).toISOString()
-          : null,
-    result,
-    failureDetails: Array.isArray(task.failureDetails)
-      ? task.failureDetails
-          .map(normalizeFailureDetail)
-          .filter((detail): detail is TaskFailureDetail => detail !== null)
-      : [],
-    runHistory: Array.isArray(task.runHistory)
-      ? task.runHistory.map(normalizeRunRecord).filter((run): run is TaskRunRecord => run !== null)
-      : [],
     startedAtMs,
     updatedAtMs: typeof task.updatedAtMs === 'number' ? task.updatedAtMs : now,
-    logs: normalizeTaskLogs(task, now),
+    result,
     resultItems: Array.isArray(task.resultItems)
       ? task.resultItems.map(normalizeResultRow).filter((row): row is TaskResultRow => row !== null)
       : [],
-    activeRunId: typeof task.activeRunId === 'string' ? task.activeRunId : null,
   }
 }
 
@@ -240,39 +83,17 @@ async function fetchStateFromPg(): Promise<DatabaseShape | null> {
   const db = getDb()
   const now = Date.now()
 
-  const [taskRows, fieldRows] = await Promise.all([
-    db.select().from(tasksTable),
-    db.select().from(fieldConfigsTable),
-  ])
+  const taskRows = await db.select().from(tasksTable)
 
-  const everythingEmpty = taskRows.length === 0 && fieldRows.length === 0
-
-  if (everythingEmpty) {
+  if (taskRows.length === 0) {
     return null
   }
 
-  const seed = createSeedDatabase()
-
-  const tasks = taskRows.map((row: { payload: Partial<TaskRuntimeRecord> }) =>
-    normalizeTaskRecord(row.payload, now),
+  const tasks = taskRows.map((row: { payload: Partial<TaskRuntimeRecord>; userId: string }) =>
+    normalizeTaskRecord(row.payload, now, row.userId),
   )
 
-  const fieldConfigs: FieldConfig[] = fieldRows.length
-    ? fieldRows.map(
-        (row: { id: string; label: string; path: string; type: string; enabled: boolean }) => ({
-          id: row.id,
-          label: row.label,
-          path: row.path,
-          type: row.type as FieldType,
-          enabled: row.enabled,
-        }),
-      )
-    : seed.fieldConfigs
-
-  return {
-    tasks,
-    fieldConfigs,
-  }
+  return { tasks }
 }
 
 async function flushStateToPg(snapshot: DatabaseShape): Promise<void> {
@@ -285,27 +106,13 @@ async function flushStateToPg(snapshot: DatabaseShape): Promise<void> {
       await tx.insert(tasksTable).values(
         snapshot.tasks.map((task) => ({
           id: task.id,
-          userId: null,
+          userId: task.userId,
           url: task.url,
           status: task.status,
           payload: task,
           startedAtMs: task.startedAtMs,
           updatedAtMs: task.updatedAtMs,
           createdAt: new Date(Date.parse(task.createdAt) || Date.now()),
-        })),
-      )
-    }
-
-    await tx.delete(fieldConfigsTable)
-    if (snapshot.fieldConfigs.length > 0) {
-      await tx.insert(fieldConfigsTable).values(
-        snapshot.fieldConfigs.map((field) => ({
-          id: field.id,
-          userId: null,
-          label: field.label,
-          path: field.path,
-          type: field.type,
-          enabled: field.enabled,
         })),
       )
     }
@@ -323,8 +130,7 @@ export async function loadDatabase(): Promise<DatabaseShape> {
     return state
   }
 
-  state = createSeedDatabase()
-  await flushStateToPg(state)
+  state = { tasks: [] }
   return state
 }
 
@@ -336,7 +142,6 @@ async function performSave(): Promise<void> {
   // 取一次内存快照避免在 PG 写入期间被 worker 修改导致不一致。
   const snapshot: DatabaseShape = {
     tasks: state.tasks.map((task) => ({ ...task })),
-    fieldConfigs: state.fieldConfigs.map((field) => ({ ...field })),
   }
 
   await flushStateToPg(snapshot)

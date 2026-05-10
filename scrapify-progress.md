@@ -59,6 +59,51 @@
 
 ## 2. 开发记录
 
+## 2026-05-11 第 24 次整理：清理对话式 UI 切换后遗留的旧后端代码
+
+> 产品形态从"6 页 SaaS 控制台"切换到"对话式采集器"已经一段时间，前端只剩 `/`、`/records`、`/me`，但后端仍维护一整套为旧前端准备的字段、路由和辅助代码。本次复盘把"产出但无人消费"的部分一次性清掉，让前后端契约对齐到当前真实使用面。
+
+### 关键发现（动手前的复盘）
+
+- ~~前端实际只读 `Task` 这 7 个字段（`id, url, status, progress, itemCount, elapsed, createdAt`）；`TaskDetail` 上扩展的 14 个字段（`mode/region/fields/concurrency/delay/targetCount/startedAt/finishedAt/errorMessage/workerId/lastHeartbeatAt/result/failureDetails/runHistory`）前端从未访问~~
+- ~~两个后端路由前端从未调用：`PATCH /api/tasks/:id`（含 `applyTaskPatch` ~63 行实现）和 `GET /api/tasks/:id/logs`（前端从不读 task.logs）~~
+- ~~**意外发现**：字段配置链路一直是坏的。Composer 把 `FieldConfig.id`（随机 UUID `field-xxxxxx`）传给后端，后端 `mapProductToResult` 用这些 UUID 当 key 查内置 `fieldMap`（key 是 `'title'`/`'price'`/`'sku'` 等语义名），永远 miss → 每个 row 实际只有 `id/handle/url` 三个有值的键，CSV 导出时 Title/Vendor/Variant SKU/Variant Price 这几列全是空的。删掉字段配置、让后端总是输出全集字段，**顺手修了这个隐性 bug**~~
+
+### 后端
+
+- ~~`backend/src/types.ts` 大瘦身：删除 `TaskLogEntry`/`TaskFailureDetail`/`TaskRunRecord`/`TaskDetail`/`FieldType`/`FieldConfig`；`NewTaskForm` 简化为 `{ url: string }`；`TaskRuntimeRecord` 改 `extends Task`，仅保留 `userId/startedAtMs/updatedAtMs/result/resultItems`~~
+- ~~`backend/src/db/schema.ts` 删除 `fieldConfigs` 表定义；新增迁移 `0003_youthful_gauntlet.sql` 做 `DROP TABLE field_configs CASCADE`~~
+- ~~`backend/src/services/task-runtime.ts` 从 1658 行降到 ~1100 行：删除 `createTaskLog`/`appendLog`/`createFailureDetail`/`createRunRecord`/`getActiveRun`/`beginTaskRun`/`updateActiveRun`/`updateActiveRunSource`/`toTaskDetail`/`estimateTargetCount`/`applyTaskPatch` 共 11 个函数；删除 `RUN_HISTORY_LIMIT`/`FAILURE_HISTORY_LIMIT`/`TASK_WORKER_ID` 常量；移除全部 ~30 处 `appendLog(record, ...)` 调用，改为 `console.log/warn` 不再持久化（运维日志靠 fastify pino）~~
+- ~~抽出 `reportCollectorProgress(record, items, progress)` helper：4 个 collector 里原本 6-8 行的"itemCount / progress / resultItems / updatedAtMs / lastHeartbeatAt / elapsed + updateActiveRun + appendLog + saveDatabase"内联代码统一成一处调用，~30 行重复消失~~
+- ~~`mapProductToResult` / `mapWooCommerceProduct` / `mapGenericProductToResult` 三处去掉 `fields: string[]` 入参，直接把 `fieldMap` 全部展开到 row。这是修复字段配置链路 bug 的关键改动~~
+- ~~`backend/src/services/data-store.ts` 去掉 `createMigratedLog`/`normalizeTaskLogs`/`normalizeFailureDetail`/`normalizeRunRecord`；`normalizeTaskRecord` 简化为只处理 12 个保留字段~~
+- ~~`backend/src/routes/tasks.ts` 删 `PATCH /api/tasks/:id` 与 `GET /api/tasks/:id/logs` 两个 handler，`GET /api/tasks/:id` 改为返回 `toTask`~~
+- ~~`backend/src/routes/fields.ts` 整文件删除，`server.ts` 同步移除 `registerFieldRoutes` 注册~~
+- ~~`backend/src/data/seed.ts` 删除 `FIELD_CONFIG_TEMPLATE` 与 `createDefaultFieldConfigs`，仅保留 `formatElapsed`~~
+
+### 前端
+
+- ~~`lib/types/index.ts` 同步瘦身：删 `TaskLogEntry`/`TaskFailureDetail`/`TaskRunRecord`/`TaskResultSummary`/`TaskDetail`/`FieldType`/`FieldConfig`；`NewTaskForm` 简化为 `{ url: string }`~~
+- ~~删除 `app/api/tasks/[id]/logs/route.ts` 整文件、`app/api/fields/route.ts` 整文件；`app/api/tasks/[id]/route.ts` 移除 PATCH handler~~
+- ~~删除 `hooks/useFields.ts` 与 `lib/store/uiStore.ts`（前者随字段配置一起下线，后者 `isResultsOpen` 状态从未被任何组件订阅）~~
+- ~~删除 `components/ui/Button.tsx`（grep 确认无任何 import）~~
+- ~~`lib/store/taskStore.ts` 移除 `setTasks` 与 `updateTask` 两个 action（仅 `addTask/removeTask/replaceTask` 在 `useCreateTask` 用到）~~
+- ~~`components/composer/Composer.tsx` 移除 `useFields` 链路：删 `fieldsQuery`、`enabledFieldIds`、submit 中三段字段校验；POST body 简化为 `{ url }`~~
+- ~~`app/me/page.tsx` 删除「字段模板」tab + 整个 `FieldsTab` 组件函数（86 行）~~
+
+### 配置 + 文档
+
+- ~~`package.json` 顶层 dependencies 移除 `@tanstack/react-table`、`recharts`、`tsx`（全仓库 grep 确认无 import）~~
+- ~~`CLAUDE.md` 移除 `db:migrate-from-json` 命令行、`BACKEND_DATA_FILE` legacy 段；schema 描述同步成"两表（users + tasks）"~~
+- ~~`deploy/phase-0-verify.md` 删除 3.3 节中的 `db:migrate-from-json` 命令行 + Q6 整段~~
+
+### 验证
+
+- ~~`npm run backend:check` 通过~~
+- ~~`npm run lint` 通过~~
+- ~~`npx tsc --noEmit` 仅剩 `lib/auth.ts` 的 2 个错误（`next-auth/jwt` augmentation 找不到），与本次清理无关——本次清理顺手把另外 4 个先前未追踪的类型错误（`require-user.ts` 的 `hmacSecret`/`imageUrl`、`auth-proxy.ts` 的 `user`）顺势带过~~
+- 未完成事项：浏览器端到端冒烟（提交真实 Shopify URL → 完成 → 导出 CSV，验证 Title/Vendor/SKU/Price 列有数据）由用户在自己的环境里跑
+
 ## 2026-05-07 第 23 次整理：Composer 加 URL 类型识别 + 模式不匹配软提示
 
 > 单品模式下用户粘了 `/collections/...` 链接（或目录模式下粘了 `/products/...`）会跑不出结果，体验是"提交了但抓不到"。本次改成提交前检测、给出软提示 + 一键切换模式，避免用户带着错配模式进队列。

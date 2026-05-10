@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { Plus, Settings, User, Loader2, CheckCircle2, AlertCircle, Clock, History } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import { getConversations } from '@/lib/preferences'
 import type { CollectConversation } from '@/lib/types'
@@ -30,6 +32,7 @@ function formatRelative(iso: string) {
 export function Sidebar({ refreshKey = 0 }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const { data: session } = useSession()
   const [conversations, setConversations] = useState<CollectConversation[]>([])
 
   useEffect(() => {
@@ -37,6 +40,9 @@ export function Sidebar({ refreshKey = 0 }: SidebarProps) {
   }, [refreshKey, pathname])
 
   const recent = conversations.slice(0, MAX_RECENT)
+  const userName = session?.user?.name ?? '我'
+  const userImage = session?.user?.image ?? null
+  const userInitial = userName.slice(0, 1).toUpperCase()
 
   return (
     <aside className="flex h-screen w-[240px] shrink-0 flex-col border-r border-line bg-surface">
@@ -83,11 +89,11 @@ export function Sidebar({ refreshKey = 0 }: SidebarProps) {
         ) : (
           <ul>
             {recent.map((conv) => {
-              const active = pathname === `/c/${conv.id}`
+              const active = pathname === '/records'
               return (
                 <li key={conv.id}>
                   <Link
-                    href={`/c/${conv.id}`}
+                    href="/records"
                     className={cn(
                       'group flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-[15px] transition-colors',
                       active ? 'bg-surface-soft text-ink' : 'text-ink-muted hover:bg-surface-soft hover:text-ink',
@@ -116,10 +122,20 @@ export function Sidebar({ refreshKey = 0 }: SidebarProps) {
               : 'text-ink-muted hover:bg-surface-soft hover:text-ink',
           )}
         >
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ink text-[12.5px] font-semibold text-accent-fg">
-            <User size={12} />
-          </span>
-          <span className="flex-1 truncate text-[15px]">cooltest</span>
+          {userImage ? (
+            <Image
+              src={userImage}
+              alt={userName}
+              width={24}
+              height={24}
+              className="h-6 w-6 shrink-0 rounded-full"
+            />
+          ) : (
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-[12.5px] font-semibold text-accent-fg">
+              {session ? userInitial : <User size={12} />}
+            </span>
+          )}
+          <span className="flex-1 truncate text-[15px]">{userName}</span>
           <Settings size={13} className="text-ink-subtle" />
         </Link>
       </div>
