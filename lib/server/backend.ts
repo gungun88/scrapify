@@ -43,9 +43,10 @@ function joinPath(prefix: string, path: string) {
   return `${normalizedPrefix.replace(/\/$/, '')}${normalizedPath}`
 }
 
-// 与 backend/src/middleware/require-user.ts 的签名口径一致：sub|email|name|image
-function signUserHeaders(secret: string, user: AuthUser) {
-  const message = [user.id, user.email ?? '', user.name ?? '', user.image ?? ''].join('|')
+// 与 backend/src/middleware/require-user.ts 的签名口径一致：sub|email|name|image|ts
+// 加 ts 是为了防重放:后端只接受 5 分钟窗口内的签名,过期请求即使签名合法也被拒。
+function signUserHeaders(secret: string, user: AuthUser, ts: string) {
+  const message = [user.id, user.email ?? '', user.name ?? '', user.image ?? '', ts].join('|')
   return createHmac('sha256', secret).update(message).digest('hex')
 }
 
@@ -66,11 +67,13 @@ function buildHeaders(token: string | null, body: unknown, user: AuthUser | unde
     if (!hmacSecret) {
       throw new Error('SCRAPIFY_BACKEND_HMAC_SECRET is not configured; cannot forward authenticated request.')
     }
+    const ts = Date.now().toString()
     headers.set('X-User-Sub', user.id)
     headers.set('X-User-Email', user.email ?? '')
     headers.set('X-User-Name', user.name ?? '')
     headers.set('X-User-Image', user.image ?? '')
-    headers.set('X-User-Sig', signUserHeaders(hmacSecret, user))
+    headers.set('X-User-Ts', ts)
+    headers.set('X-User-Sig', signUserHeaders(hmacSecret, user, ts))
   }
 
   return headers

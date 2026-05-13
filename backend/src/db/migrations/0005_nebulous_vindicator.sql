@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_mode_check" CHECK ("conversations"."mode" IN ('single', 'catalog'));

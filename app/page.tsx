@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { signOut, useSession } from 'next-auth/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { ArrowRight, LogOut } from 'lucide-react'
 import { Composer } from '@/components/composer/Composer'
 import {
@@ -11,19 +11,16 @@ import {
   aggregateElapsed,
   inferConversationStatus,
 } from '@/components/conversation/ConversationCard'
+import { useConversations } from '@/hooks/useConversations'
 import { useTasks } from '@/hooks/useTasks'
-import { getConversations } from '@/lib/preferences'
-import type { CollectConversation, Task } from '@/lib/types'
+import type { Task } from '@/lib/types'
 
 const RECENT_LIMIT = 3
 
 export default function HomePage() {
-  const [conversations, setConversations] = useState<CollectConversation[]>([])
+  const conversationsQuery = useConversations()
   const tasksQuery = useTasks()
-
-  useEffect(() => {
-    setConversations(getConversations())
-  }, [])
+  const conversations = useMemo(() => conversationsQuery.data ?? [], [conversationsQuery.data])
 
   const taskById = useMemo(() => {
     const m = new Map<string, Task>()

@@ -1,18 +1,38 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { getDatabase, saveDatabase } from '../services/data-store'
+import { getDatabase, markTaskDirty, saveDatabase } from '../services/data-store'
 import { createRuntimeTask, toTask } from '../services/task-runtime'
+import { assertPublicHostname, SsrfBlockedError } from '../services/url-guard'
 import type { DatabaseShape, NewTaskForm, TaskResultRow, TaskRuntimeRecord } from '../types'
 
 type TaskExportFormat = 'csv' | 'json'
 
-function isValidNewTaskForm(body: unknown): body is NewTaskForm {
+const MAX_TASK_URL_LENGTH = 2048
+
+function normalizeNewTaskForm(body: unknown): NewTaskForm | null {
   if (!body || typeof body !== 'object') {
-    return false
+    return null
   }
 
   const value = body as Record<string, unknown>
 
-  return typeof value.url === 'string'
+  if (typeof value.url !== 'string' || value.url.length > MAX_TASK_URL_LENGTH) {
+    return null
+  }
+
+  // platform 容错:不传 / 非字符串 / 空串 都默认 'auto',createRuntimeTask 会再兜一次
+  const platform =
+    typeof value.platform === 'string' && value.platform.trim() ? value.platform : 'auto'
+
+  // catalogLimit 容错:接受 number > 0 / 'all' / 其它 → null(等价于无限制)
+  // 'all' 在前端是显式选项,后端统一存 null(便于 collector 用 `limit ?? Infinity` 判断)
+  let catalogLimit: NewTaskForm['catalogLimit'] = null
+  if (typeof value.catalogLimit === 'number' && value.catalogLimit > 0) {
+    catalogLimit = Math.floor(value.catalogLimit)
+  } else if (value.catalogLimit === 'all') {
+    catalogLimit = 'all'
+  }
+
+  return { url: value.url, platform, catalogLimit }
 }
 
 function findUserTask(db: DatabaseShape, userId: string, taskId: string) {
@@ -27,11 +47,16 @@ function userIdOf(request: FastifyRequest): string {
 }
 
 export async function registerTaskRoutes(app: FastifyInstance) {
-  app.get('/api/tasks', async (request, reply) => {
-    const userId = userIdOf(request)
-    const db = await getDatabase()
-    return reply.send(db.tasks.filter((task) => task.userId === userId).map(toTask))
-  })
+  // 前端每 2s 轮询一次,30/min/user 是基础需求。120 留足 +UI 切换 +多页打开的余量。
+  app.get(
+    '/api/tasks',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const userId = userIdOf(request)
+      const db = await getDatabase()
+      return reply.send(db.tasks.filter((task) => task.userId === userId).map(toTask))
+    },
+  )
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) => {
     const userId = userIdOf(request)
@@ -71,6 +96,7 @@ export async function registerTaskRoutes(app: FastifyInstance) {
       const exportedAt = new Date().toISOString()
       if (task.result) {
         task.result.exportedAt = exportedAt
+        markTaskDirty(task.id)
         await saveDatabase()
       }
 
@@ -99,19 +125,44 @@ export async function registerTaskRoutes(app: FastifyInstance) {
     },
   )
 
-  app.post('/api/tasks', async (request, reply) => {
-    if (!isValidNewTaskForm(request.body)) {
+  app.post(
+    '/api/tasks',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+    const form = normalizeNewTaskForm(request.body)
+    if (!form) {
       return reply.status(400).send({ message: 'Invalid task payload' })
     }
 
-    if (!request.body.url.trim()) {
+    if (!form.url.trim()) {
       return reply.status(400).send({ message: 'Task URL is required' })
+    }
+
+    // SSRF 入口校验:解析 hostname → 私网/保留段拒绝 → DNS 解析二次校验。
+    // 不让坏 URL 进 worker 执行队列。
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(form.url.trim().startsWith('http') ? form.url.trim() : `https://${form.url.trim()}`)
+    } catch {
+      return reply.status(400).send({ message: 'Invalid task URL' })
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return reply.status(400).send({ message: 'Only http/https URLs are allowed' })
+    }
+    try {
+      await assertPublicHostname(parsedUrl.hostname)
+    } catch (error) {
+      if (error instanceof SsrfBlockedError) {
+        return reply.status(400).send({ message: `URL not allowed: ${error.message}` })
+      }
+      throw error
     }
 
     const userId = userIdOf(request)
     const db = await getDatabase()
-    const task = createRuntimeTask(request.body, userId)
+    const task = createRuntimeTask(form, userId)
     db.tasks.unshift(task)
+    markTaskDirty(task.id)
     await saveDatabase()
 
     return reply.status(201).send(toTask(task))

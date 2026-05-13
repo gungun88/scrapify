@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { gunzipSync } from 'node:zlib'
 import { formatElapsed } from '../data/seed'
 import type {
   NewTaskForm,
@@ -6,8 +7,10 @@ import type {
   TaskResultRow,
   TaskRuntimeRecord,
 } from '../types'
-import { getDatabase, saveDatabase } from './data-store'
+import { getDatabase, markTaskDirty, saveDatabase } from './data-store'
+import { formatAttemptedCollectors, getCollectorOrder, type CollectorKey } from './platform-registry'
 import { extractNextDataPayload } from './runtime-utils'
+import { safeFetch, SsrfBlockedError, assertPublicHostname } from './url-guard'
 
 const TASK_TICK_MS = 3000
 const TASK_QUEUE_DELAY_MS = 1500
@@ -18,15 +21,34 @@ const REQUEST_TIMEOUT_MS = 15_000
 const RESULT_PREVIEW_LIMIT = 5
 const WOOCOMMERCE_PAGE_LIMIT = 100
 const WOOCOMMERCE_MAX_PAGES = 5
-const SITEMAP_MAX_URLS = 25
+const SITEMAP_MAX_URLS = 500
 const SITEMAP_INDEX_BRANCH_LIMIT = 3
-const PRODUCT_URL_PATTERN = /\/products?\//i
+// 商品 URL 识别:
+// - 路径式:/products/xxx (Shopify 系)、/product/xxx (WooCommerce 单数)
+// - 路径式 SaaS / 自建:/p/<slug>、/item/<slug>、/goods/<slug>、/detail/<slug>
+//   (非商品页虽偶有命中,后续 JSON-LD `@type=Product` 解析会过滤掉)
+// - query-string 式:OpenCart 用 route=product/product、ZenCart 用 main_page=product_info
+const PRODUCT_URL_PATTERN = /\/products?\/|\/(?:p|item|goods|detail)\/|[?&](?:route=product\/product|main_page=product_info)\b/i
 // 抓取节奏写死，原来由 NewTaskForm.delay 传入，UI 切换后所有任务都走同一档
 const DEFAULT_REQUEST_DELAY_MS = 1500
 
 let taskWorkerTimer: NodeJS.Timeout | null = null
 let taskWorkerBusy = false
 const activeExecutions = new Map<string, Promise<void>>()
+
+// 给 routes 用:判断 task 是否正被 worker 跑。
+// 删会话级联清理时,正在跑的 task 不能直接从内存抹掉(worker 仍持有引用),
+// 要先标 error 让 worker 跑完自然 finally。
+export function isTaskActive(taskId: string): boolean {
+  return activeExecutions.has(taskId)
+}
+
+// 给 routes 用:对正在跑的 task 标错误并通知 worker。
+// worker tick 不会主动停止已经发起的 fetch,但下个 page 完成后会检查 status,
+// 这里给出一个明确的中止信号(status=error)避免它继续 saveDatabase 把 status 改回去。
+export function abortActiveTask(record: TaskRuntimeRecord, message: string): void {
+  markTaskError(record, Date.now(), message)
+}
 
 interface ShopifyVariant {
   sku?: string | null
@@ -76,6 +98,8 @@ export function toTask(record: TaskRuntimeRecord): Task {
   return {
     id: record.id,
     url: record.url,
+    platform: record.platform || 'auto',
+    catalogLimit: typeof record.catalogLimit === 'number' ? record.catalogLimit : null,
     status: record.status,
     progress: record.status === 'done' ? 100 : record.progress,
     itemCount: record.status === 'pending' ? 0 : record.itemCount,
@@ -87,10 +111,18 @@ export function toTask(record: TaskRuntimeRecord): Task {
 export function createRuntimeTask(form: NewTaskForm, userId: string): TaskRuntimeRecord {
   const now = Date.now()
 
+  // 'all' → null(在 task 上统一表示"无限制");number > 0 直接采用;其它一律 null
+  let catalogLimit: number | null = null
+  if (typeof form.catalogLimit === 'number' && form.catalogLimit > 0) {
+    catalogLimit = Math.floor(form.catalogLimit)
+  }
+
   return {
     id: `task-${randomUUID().slice(0, 8)}`,
     userId,
     url: form.url.trim(),
+    platform: typeof form.platform === 'string' && form.platform ? form.platform : 'auto',
+    catalogLimit,
     status: 'pending',
     progress: 0,
     itemCount: 0,
@@ -118,6 +150,7 @@ function markTaskRunning(record: TaskRuntimeRecord, now: number) {
   record.startedAtMs = now
   record.updatedAtMs = now
   record.elapsed = '0s'
+  markTaskDirty(record.id)
   console.log(`[task ${record.id}] worker claimed task`)
 }
 
@@ -127,6 +160,7 @@ function markTaskDone(record: TaskRuntimeRecord, now: number) {
   record.itemCount = record.resultItems.length
   record.updatedAtMs = now
   record.elapsed = formatElapsed(Math.max(0, now - record.startedAtMs))
+  markTaskDirty(record.id)
   console.log(`[task ${record.id}] completed with ${record.itemCount} item(s)`)
 }
 
@@ -134,6 +168,7 @@ function markTaskError(record: TaskRuntimeRecord, now: number, message: string) 
   record.status = 'error'
   record.updatedAtMs = now
   record.elapsed = formatElapsed(Math.max(0, now - record.startedAtMs))
+  markTaskDirty(record.id)
   console.error(`[task ${record.id}] failed: ${message}`)
 }
 
@@ -151,6 +186,11 @@ function updateRunningHeartbeat(record: TaskRuntimeRecord, now: number) {
   }
 
   record.updatedAtMs = now
+  if (changed) {
+    // 只在 elapsed 真正变化(秒级)时才标 dirty + 触发刷盘,
+    // 否则 worker 每 3s tick 都会写 updatedAtMs 但用户看到的字段没变。
+    markTaskDirty(record.id)
+  }
   return changed
 }
 
@@ -457,7 +497,7 @@ async function fetchProductsPage(origin: string, path: string, page: number) {
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await safeFetch(endpoint, {
       headers: {
         accept: 'application/json',
         'user-agent': 'Scrapify/0.1',
@@ -504,7 +544,7 @@ async function fetchHtmlPage(url: string) {
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: {
         accept: 'text/html,application/xhtml+xml',
         'user-agent': 'Scrapify/0.1',
@@ -597,7 +637,13 @@ function collectProductsFromNextData(html: string, origin: string) {
 
 function collectProductsFromMarkup(html: string, origin: string) {
   const items: GenericCollectedProduct[] = []
-  const anchorPattern = /<a[^>]+href=["']([^"']*\/products\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  // 匹配四种风格(与 PRODUCT_URL_PATTERN 保持一致):
+  //  - Shopify 系: <a href="/products/slug">
+  //  - WooCommerce: <a href="/product/slug">
+  //  - 自建 / 中文 SaaS: /p/、/item/、/goods/、/detail/
+  //  - OpenCart/ZenCart: <a href="...?route=product/product&product_id=N"> 或 main_page=product_info
+  const anchorPattern =
+    /<a[^>]+href=["']([^"']*(?:\/products?\/[^"'?#]+|\/(?:p|item|goods|detail)\/[^"'?#]+|[?&](?:route=product\/product|main_page=product_info)\b[^"']*))["'][^>]*>([\s\S]*?)<\/a>/gi
 
   for (const match of html.matchAll(anchorPattern)) {
     const href = match[1]
@@ -609,7 +655,7 @@ function collectProductsFromMarkup(html: string, origin: string) {
     const title = stripTags(match[2] || '')
     const nearby = html.slice(match.index ?? 0, (match.index ?? 0) + 800)
     const imageMatch = nearby.match(/<img[^>]+src=["']([^"']+)["']/i)
-    const priceMatch = nearby.match(/[$€£]\s*\d[\d,]*(?:\.\d+)?/)
+    const priceMatch = nearby.match(/[$€£¥]\s*\d[\d,]*(?:\.\d+)?/)
     const price = priceMatch ? extractNumber(priceMatch[0]) : null
 
     if (!title) {
@@ -769,7 +815,7 @@ async function fetchWooCommercePage(origin: string, path: string, page: number) 
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await safeFetch(endpoint, {
       headers: {
         accept: 'application/json',
         'user-agent': 'Scrapify/0.1',
@@ -816,9 +862,9 @@ async function fetchSitemapXml(url: string) {
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: {
-        accept: 'application/xml,text/xml,*/*',
+        accept: 'application/xml,text/xml,application/gzip,application/x-gzip,*/*',
         'user-agent': 'Scrapify/0.1',
       },
       signal: controller.signal,
@@ -828,7 +874,20 @@ async function fetchSitemapXml(url: string) {
       return null
     }
 
-    const body = await response.text()
+    // 以字节读取,先检测 gzip magic bytes(1f 8b);Shoplazza 等把 sitemap_products 作为 .xml.gz
+    // 暴露,server 直接返回 application/x-gzip,fetch 不会自动解压(它只解 transport-encoded gzip)。
+    const buffer = Buffer.from(await response.arrayBuffer())
+    let body: string
+    if (buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+      try {
+        body = gunzipSync(buffer).toString('utf8')
+      } catch {
+        return null
+      }
+    } else {
+      body = buffer.toString('utf8')
+    }
+
     const trimmed = body.trim()
 
     if (
@@ -865,7 +924,12 @@ function parseSitemapLocations(xml: string) {
 }
 
 async function discoverSitemapProductUrls(parsedUrl: URL): Promise<string[]> {
-  const candidates = ['/sitemap_products_1.xml', '/sitemap.xml', '/sitemap_index.xml']
+  const candidates = [
+    '/sitemap_products_1.xml', // Shopify
+    '/sitemap.xml',
+    '/sitemap_index.xml',
+    '/index.php?route=feed/google_sitemap', // OpenCart 3.x 默认 sitemap feed
+  ]
   const visited = new Set<string>()
   const collected = new Set<string>()
 
@@ -947,6 +1011,7 @@ async function reportCollectorProgress(
   record.resultItems = items
   record.updatedAtMs = now
   record.elapsed = formatElapsed(Math.max(0, now - record.startedAtMs))
+  markTaskDirty(record.id)
   await saveDatabase()
 }
 
@@ -954,6 +1019,7 @@ async function tryShopifyCollector(
   record: TaskRuntimeRecord,
   parsedUrl: URL,
   delayMs: number,
+  itemLimit: number | null,
 ): Promise<CollectorOutcome> {
   const source = 'shopify-products-json'
   const candidatePaths = buildCandidatePaths(parsedUrl)
@@ -967,6 +1033,7 @@ async function tryShopifyCollector(
     let pathPageCount = 0
     let pathEndpoint: string | null = null
     let foundProducts = false
+    let reachedLimit = false
 
     for (let page = 1; page <= SHOPIFY_MAX_PAGES; page += 1) {
       let response: Awaited<ReturnType<typeof fetchProductsPage>>
@@ -999,9 +1066,15 @@ async function tryShopifyCollector(
       pathItems = [...pathItems, ...mappedItems]
       pathPageCount = page
 
+      // 达到 catalogLimit 早停(截到精确数量)
+      if (itemLimit !== null && pathItems.length >= itemLimit) {
+        pathItems = pathItems.slice(0, itemLimit)
+        reachedLimit = true
+      }
+
       await reportCollectorProgress(record, pathItems, 15 + page * 20)
 
-      if (mappedItems.length < SHOPIFY_PAGE_LIMIT) {
+      if (reachedLimit || mappedItems.length < SHOPIFY_PAGE_LIMIT) {
         break
       }
 
@@ -1028,6 +1101,7 @@ async function tryWooCommerceCollector(
   record: TaskRuntimeRecord,
   parsedUrl: URL,
   delayMs: number,
+  itemLimit: number | null,
 ): Promise<CollectorOutcome> {
   const source = 'woocommerce-store-api'
   const candidatePaths = ['/wp-json/wc/store/v1/products', '/wp-json/wc/store/products']
@@ -1041,6 +1115,7 @@ async function tryWooCommerceCollector(
     let pathPageCount = 0
     let pathEndpoint: string | null = null
     let foundProducts = false
+    let reachedLimit = false
 
     for (let page = 1; page <= WOOCOMMERCE_MAX_PAGES; page += 1) {
       let response: Awaited<ReturnType<typeof fetchWooCommercePage>>
@@ -1073,9 +1148,14 @@ async function tryWooCommerceCollector(
       pathItems = [...pathItems, ...mappedItems]
       pathPageCount = page
 
+      if (itemLimit !== null && pathItems.length >= itemLimit) {
+        pathItems = pathItems.slice(0, itemLimit)
+        reachedLimit = true
+      }
+
       await reportCollectorProgress(record, pathItems, 20 + page * 18)
 
-      if (mappedItems.length < WOOCOMMERCE_PAGE_LIMIT) {
+      if (reachedLimit || mappedItems.length < WOOCOMMERCE_PAGE_LIMIT) {
         break
       }
 
@@ -1102,6 +1182,7 @@ async function trySitemapCollector(
   record: TaskRuntimeRecord,
   parsedUrl: URL,
   delayMs: number,
+  itemLimit: number | null,
 ): Promise<CollectorOutcome> {
   const source = 'sitemap-html'
 
@@ -1118,12 +1199,20 @@ async function trySitemapCollector(
     return { items: [], pageCount: 0, endpoint: null, source }
   }
 
+  // 有 itemLimit 时,稍稍多取一些(应对 JSON-LD 解析失败造成的丢失)再 slice
+  const fetchBudget =
+    itemLimit !== null
+      ? Math.min(productUrls.length, Math.ceil(itemLimit * 1.2))
+      : productUrls.length
+
   const collected: TaskResultRow[] = []
   const sitemapDelayMs = Math.max(150, Math.round(delayMs / 2))
   let lastEndpoint: string | null = null
+  let processed = 0
 
-  for (let index = 0; index < productUrls.length; index += 1) {
+  for (let index = 0; index < fetchBudget; index += 1) {
     const productUrl = productUrls[index]
+    processed = index + 1
     let html = ''
 
     try {
@@ -1148,16 +1237,23 @@ async function trySitemapCollector(
       collected.push(...fallbackItems)
     }
 
-    await reportCollectorProgress(record, collected, 20 + Math.floor(((index + 1) / productUrls.length) * 70))
+    // 达到 catalogLimit:截断 + 早停(每件商品 ~1.5s 间隔,这步节省最多)
+    if (itemLimit !== null && collected.length >= itemLimit) {
+      collected.length = itemLimit
+      await reportCollectorProgress(record, collected, 90)
+      break
+    }
 
-    if (index < productUrls.length - 1) {
+    await reportCollectorProgress(record, collected, 20 + Math.floor((processed / fetchBudget) * 70))
+
+    if (index < fetchBudget - 1) {
       await wait(sitemapDelayMs)
     }
   }
 
   return {
     items: collected,
-    pageCount: productUrls.length,
+    pageCount: processed,
     endpoint: lastEndpoint,
     source,
   }
@@ -1167,6 +1263,7 @@ async function tryHtmlFallbackCollector(
   record: TaskRuntimeRecord,
   parsedUrl: URL,
   _delayMs: number,
+  itemLimit: number | null,
 ): Promise<CollectorOutcome> {
   const source = 'html-structured-data'
 
@@ -1179,10 +1276,15 @@ async function tryHtmlFallbackCollector(
     return { items: [], pageCount: 0, endpoint: null, source }
   }
 
-  const items = collectFallbackHtmlProducts(html, parsedUrl).map(mapGenericProductToResult)
+  let items = collectFallbackHtmlProducts(html, parsedUrl).map(mapGenericProductToResult)
 
   if (items.length === 0) {
     return { items: [], pageCount: 0, endpoint: parsedUrl.toString(), source }
+  }
+
+  // 单页 HTML 解析可能一次性吐出几十件,按 catalogLimit 截断
+  if (itemLimit !== null && items.length > itemLimit) {
+    items = items.slice(0, itemLimit)
   }
 
   return {
@@ -1204,16 +1306,35 @@ async function executeTask(taskId: string) {
 
   try {
     const parsedUrl = normalizeTaskUrl(record.url)
+    // 双重校验:routes/tasks.ts 入口已经过 assertPublicHostname,这里再校验一次
+    // 防止数据库里残留的老任务(可能在校验逻辑加上之前提交的)在 worker 重启后被执行。
+    await assertPublicHostname(parsedUrl.hostname)
     const delayMs = DEFAULT_REQUEST_DELAY_MS
 
-    const collectors: Array<
-      (record: TaskRuntimeRecord, parsedUrl: URL, delayMs: number) => Promise<CollectorOutcome>
-    > = [tryShopifyCollector, tryWooCommerceCollector, trySitemapCollector, tryHtmlFallbackCollector]
+    // platform → collector 顺序由 platform-registry 决定。未知 platform 走 auto。
+    const collectorMap: Record<
+      CollectorKey,
+      (
+        record: TaskRuntimeRecord,
+        parsedUrl: URL,
+        delayMs: number,
+        itemLimit: number | null,
+      ) => Promise<CollectorOutcome>
+    > = {
+      shopify: tryShopifyCollector,
+      woocommerce: tryWooCommerceCollector,
+      sitemap: trySitemapCollector,
+      html: tryHtmlFallbackCollector,
+    }
+
+    const order = getCollectorOrder(record.platform)
+    // record.catalogLimit:number 表示采到该数量就早停;null 表示无限制(沿用各 collector 硬上限)
+    const itemLimit = record.catalogLimit
 
     let outcome: CollectorOutcome | null = null
 
-    for (const collector of collectors) {
-      const result = await collector(record, parsedUrl, delayMs)
+    for (const key of order) {
+      const result = await collectorMap[key](record, parsedUrl, delayMs, itemLimit)
       if (result.items.length > 0) {
         outcome = result
         break
@@ -1222,7 +1343,7 @@ async function executeTask(taskId: string) {
 
     if (!outcome || outcome.items.length === 0) {
       throw new Error(
-        'No products could be collected via Shopify products.json, WooCommerce store API, sitemap discovery, or HTML structured-data fallback.',
+        `No products could be collected for platform=${record.platform} via ${formatAttemptedCollectors(order)}.`,
       )
     }
 
@@ -1238,7 +1359,15 @@ async function executeTask(taskId: string) {
 
     markTaskDone(record, Date.now())
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Task execution failed.'
+    let message: string
+    if (error instanceof SsrfBlockedError) {
+      // SSRF 拦截:不要把内部细节(具体 IP / DNS 解析过程)暴露给用户,
+      // 给一个通用错误消息,真实原因留在服务端日志里。
+      console.warn(`[task ${record.id}] SSRF blocked: ${error.message}`)
+      message = 'URL not allowed: target resolves to a private or reserved network.'
+    } else {
+      message = error instanceof Error ? error.message : 'Task execution failed.'
+    }
     markTaskError(record, Date.now(), message)
   } finally {
     activeExecutions.delete(taskId)

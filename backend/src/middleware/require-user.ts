@@ -22,6 +22,16 @@ declare module 'fastify' {
 // /api/health 公开放行，其余 endpoint 全部要求登录
 const PUBLIC_PATHS = new Set(['/api/health'])
 
+// 统一 401 响应:无论 missing / invalid signature / ts 过期都返回同样的文案,
+// 避免给攻击者枚举 header 名称、确认密钥泄露等额外信息。
+// 具体原因仍写入服务端日志(redact 过的)。
+function rejectUnauthorized(reply: FastifyReply) {
+  return reply.status(401).send({ message: 'Unauthorized' })
+}
+
+// HMAC 时间戳窗口:5 分钟。超过窗口的签名一律拒绝,把"无限重放"降级为"5 分钟内可重放"。
+const HMAC_TS_WINDOW_MS = 5 * 60 * 1000
+
 export async function requireUser(request: FastifyRequest, reply: FastifyReply) {
   const path = request.url.split('?')[0] ?? request.url
   if (PUBLIC_PATHS.has(path)) {
@@ -39,22 +49,34 @@ export async function requireUser(request: FastifyRequest, reply: FastifyReply) 
   const email = headerString(request.headers['x-user-email'])
   const name = headerString(request.headers['x-user-name'])
   const image = headerString(request.headers['x-user-image'])
+  const ts = headerString(request.headers['x-user-ts'])
   const sig = headerString(request.headers['x-user-sig'])
 
-  if (!sub || !email || !sig) {
-    return reply.status(401).send({ message: 'Missing user credentials.' })
+  if (!sub || !email || !sig || !ts) {
+    request.log.warn({ path, hasSub: !!sub, hasEmail: !!email, hasSig: !!sig, hasTs: !!ts }, 'auth: missing credentials')
+    return rejectUnauthorized(reply)
   }
 
-  const expected = signUserHeaders(sub, email, name, image)
+  // ts 必须是整数毫秒时间戳,并落在 [now-5min, now+5min] 窗口内
+  const tsNumber = Number(ts)
+  if (!Number.isInteger(tsNumber) || Math.abs(Date.now() - tsNumber) > HMAC_TS_WINDOW_MS) {
+    request.log.warn({ path, tsSkew: Date.now() - tsNumber }, 'auth: ts out of window')
+    return rejectUnauthorized(reply)
+  }
+
+  const expected = signUserHeaders(sub, email, name, image, ts)
   if (!safeEqualHex(sig, expected)) {
-    return reply.status(401).send({ message: 'Invalid user signature.' })
+    request.log.warn({ path }, 'auth: invalid signature')
+    return rejectUnauthorized(reply)
   }
 
   try {
     const user = await upsertUser({ sub, email, name: name || null, image: image || null })
     request.user = user
   } catch (error) {
-    request.log.error({ err: error }, 'failed to upsert authenticated user')
+    // 只记 message + code,不记完整 err(避免 SQL/参数泄露到日志)
+    const err = error as { message?: string; code?: string }
+    request.log.error({ msg: err.message, code: err.code }, 'auth: failed to upsert user')
     return reply.status(500).send({ message: 'Failed to load user account.' })
   }
 }
@@ -64,8 +86,8 @@ function headerString(value: string | string[] | undefined): string {
   return typeof value === 'string' ? value : ''
 }
 
-function signUserHeaders(sub: string, email: string, name: string, image: string) {
-  const message = [sub, email, name, image].join('|')
+function signUserHeaders(sub: string, email: string, name: string, image: string, ts: string) {
+  const message = [sub, email, name, image, ts].join('|')
   return crypto.createHmac('sha256', backendConfig.hmacSecret).update(message).digest('hex')
 }
 

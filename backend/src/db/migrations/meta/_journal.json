@@ -29,6 +29,20 @@
       "when": 1778439715174,
       "tag": "0003_youthful_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778509524114,
+      "tag": "0004_puzzling_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778636831100,
+      "tag": "0005_nebulous_vindicator",
+      "breakpoints": true
     }
   ]
 }

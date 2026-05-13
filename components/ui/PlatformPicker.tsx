@@ -175,22 +175,27 @@ function PlatformChip({
 }) {
   const brand = getBrandIcon(option.icon)
   const hasBrand = Boolean(brand)
+  const isDisabled = Boolean(option.disabled)
 
   return (
     <button
       type="button"
-      onClick={onClick}
-      data-color-dark={!active && hasBrand && isDarkBrandColor(brand!.color) ? 'true' : undefined}
+      onClick={isDisabled ? undefined : onClick}
+      disabled={isDisabled}
+      title={isDisabled ? option.disabledReason : undefined}
+      data-color-dark={!active && !isDisabled && hasBrand && isDarkBrandColor(brand!.color) ? 'true' : undefined}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-[14px] transition-colors',
-        active
-          ? 'border-ink bg-ink text-accent-fg'
-          : hasBrand
-            ? 'text-ink hover:brightness-95'
-            : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink',
+        isDisabled
+          ? 'cursor-not-allowed border-line bg-surface-soft text-ink-subtle opacity-50'
+          : active
+            ? 'border-ink bg-ink text-accent-fg'
+            : hasBrand
+              ? 'text-ink hover:brightness-95'
+              : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink',
       )}
       style={
-        !active && hasBrand
+        !active && !isDisabled && hasBrand
           ? {
               backgroundColor: `${brand!.color}14`,
               borderColor: `${brand!.color}55`,
@@ -199,9 +204,11 @@ function PlatformChip({
       }
       role="radio"
       aria-checked={active}
+      aria-disabled={isDisabled || undefined}
     >
-      <PlatformIcon brand={brand} active={active} />
+      <PlatformIcon brand={brand} active={active} dimmed={isDisabled} />
       {option.label}
+      {isDisabled ? <span className="text-[11px] text-ink-subtle">·暂不支持</span> : null}
     </button>
   )
 }
@@ -209,9 +216,11 @@ function PlatformChip({
 function PlatformIcon({
   brand,
   active,
+  dimmed = false,
 }: {
   brand: ReturnType<typeof getBrandIcon>
   active: boolean
+  dimmed?: boolean
 }) {
   if (brand?.path) {
     return (
@@ -221,7 +230,7 @@ function PlatformIcon({
         viewBox="0 0 24 24"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden="true"
-        className="shrink-0"
+        className={cn('shrink-0', dimmed && 'opacity-60 grayscale')}
       >
         <path d={brand.path} fill={active ? 'currentColor' : brand.color} />
       </svg>
@@ -236,7 +245,7 @@ function PlatformIcon({
         width={12}
         height={12}
         aria-hidden="true"
-        className="h-3 w-3 shrink-0 object-contain"
+        className={cn('h-3 w-3 shrink-0 object-contain', dimmed && 'opacity-60 grayscale')}
       />
     )
   }

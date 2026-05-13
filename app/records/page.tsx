@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowRight, ChevronLeft, Search, Sparkles } from 'lucide-react'
 import {
   ConversationCard,
@@ -9,9 +9,9 @@ import {
   aggregateElapsed,
   inferConversationStatus,
 } from '@/components/conversation/ConversationCard'
+import { useConversations, useDeleteConversation } from '@/hooks/useConversations'
 import { useTasks } from '@/hooks/useTasks'
 import { getPlatformBreadcrumb } from '@/lib/mock/platforms'
-import { deleteConversation, getConversations } from '@/lib/preferences'
 import type { CollectConversation, Task, TaskStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -42,14 +42,16 @@ interface Enriched {
 }
 
 export default function RecordsPage() {
-  const [conversations, setConversations] = useState<CollectConversation[]>([])
   const [keyword, setKeyword] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  const conversationsQuery = useConversations()
   const tasksQuery = useTasks()
+  const deleteMutation = useDeleteConversation()
 
-  useEffect(() => {
-    setConversations(getConversations())
-  }, [])
+  const conversations: CollectConversation[] = useMemo(
+    () => conversationsQuery.data ?? [],
+    [conversationsQuery.data],
+  )
 
   const taskById = useMemo(() => {
     const m = new Map<string, Task>()
@@ -97,8 +99,7 @@ export default function RecordsPage() {
 
   function handleDelete(id: string) {
     if (!confirm('删除这条采集记录？关联的任务和数据会一并清除。')) return
-    deleteConversation(id)
-    setConversations(getConversations())
+    deleteMutation.mutate(id)
   }
 
   return (

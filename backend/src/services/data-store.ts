@@ -1,14 +1,55 @@
+import { desc, inArray } from 'drizzle-orm'
 import { getDb } from '../db/client'
-import { tasks as tasksTable } from '../db/schema'
-import type { DatabaseShape, TaskResultRow, TaskResultSummary, TaskRuntimeRecord } from '../types'
+import { conversations as conversationsTable, tasks as tasksTable } from '../db/schema'
+import type {
+  CatalogLimit,
+  CollectMode,
+  ConversationRecord,
+  DatabaseShape,
+  TaskResultRow,
+  TaskResultSummary,
+  TaskRuntimeRecord,
+} from '../types'
+
+// 内存模型不变,数据仍在进程内 in-memory 维护;但**刷盘改为按差异写**:
+// 每次 markTaskDirty / markTaskDeleted / markConversationDirty / markConversationDeleted
+// 累积变更,saveDatabase() 在合并窗口结束后只 upsert/delete 这些 id,不再 truncate 全表。
+//
+// 之前 truncate+insert 的写法在多用户场景必崩:10 用户 × 50 任务 = 每 3s 心跳
+// 锁全表 + 重写 500 行。改成行级 upsert 后,心跳只更新当前 running 任务自己那一行。
 
 let state: DatabaseShape | null = null
 
-// 同时进行的写入用 in-flight + pending 的方式合并：
-// 任何在写入过程中到来的新 save 调用都会被合并成单次后续刷盘，
-// 避免高频 heartbeat 触发的 N 次 truncate+insert。
+// 同时进行的写入用 in-flight + pending 的方式合并
 let saveInFlight: Promise<void> | null = null
 let savePending = false
+
+// 行级差异集合:saveDatabase 只刷出这些 id。
+// dirty + deleted 之间互斥:标 deleted 时从 dirty 移除,反之亦然。
+const dirtyTaskIds = new Set<string>()
+const deletedTaskIds = new Set<string>()
+const dirtyConvIds = new Set<string>()
+const deletedConvIds = new Set<string>()
+
+export function markTaskDirty(id: string): void {
+  dirtyTaskIds.add(id)
+  deletedTaskIds.delete(id)
+}
+
+export function markTaskDeleted(id: string): void {
+  deletedTaskIds.add(id)
+  dirtyTaskIds.delete(id)
+}
+
+export function markConversationDirty(id: string): void {
+  dirtyConvIds.add(id)
+  deletedConvIds.delete(id)
+}
+
+export function markConversationDeleted(id: string): void {
+  deletedConvIds.add(id)
+  dirtyConvIds.delete(id)
+}
 
 function normalizeResultRow(row: unknown): TaskResultRow | null {
   if (!row || typeof row !== 'object' || Array.isArray(row)) {
@@ -62,6 +103,11 @@ export function normalizeTaskRecord(
     id: typeof task.id === 'string' ? task.id : `task-migrated-${now}`,
     userId,
     url: typeof task.url === 'string' ? task.url : '',
+    platform: typeof task.platform === 'string' && task.platform ? task.platform : 'auto',
+    catalogLimit:
+      typeof task.catalogLimit === 'number' && task.catalogLimit > 0
+        ? Math.floor(task.catalogLimit)
+        : null,
     status:
       task.status === 'running' || task.status === 'done' || task.status === 'error'
         ? task.status
@@ -79,13 +125,64 @@ export function normalizeTaskRecord(
   }
 }
 
+interface ConversationDbRow {
+  id: unknown
+  userId: unknown
+  title: unknown
+  mode: unknown
+  platform: unknown
+  catalogLimit: unknown
+  urls: unknown
+  taskIds: unknown
+  createdAt: unknown
+}
+
+function normalizeConversationRecord(row: ConversationDbRow): ConversationRecord | null {
+  if (typeof row.id !== 'string' || typeof row.userId !== 'string') return null
+  if (typeof row.title !== 'string') return null
+  if (row.mode !== 'single' && row.mode !== 'catalog') return null
+  if (typeof row.platform !== 'string') return null
+
+  const urls = Array.isArray(row.urls) ? row.urls.filter((u): u is string => typeof u === 'string') : []
+  const taskIds = Array.isArray(row.taskIds)
+    ? row.taskIds.filter((id): id is string => typeof id === 'string')
+    : []
+
+  const catalogLimit: CatalogLimit | null =
+    row.catalogLimit === 'all' || (typeof row.catalogLimit === 'number' && row.catalogLimit > 0)
+      ? (row.catalogLimit as CatalogLimit)
+      : null
+
+  const createdAt =
+    row.createdAt instanceof Date
+      ? row.createdAt.toISOString()
+      : typeof row.createdAt === 'string'
+        ? row.createdAt
+        : new Date().toISOString()
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    title: row.title,
+    mode: row.mode as CollectMode,
+    platform: row.platform,
+    catalogLimit,
+    urls,
+    taskIds,
+    createdAt,
+  }
+}
+
 async function fetchStateFromPg(): Promise<DatabaseShape | null> {
   const db = getDb()
   const now = Date.now()
 
-  const taskRows = await db.select().from(tasksTable)
+  const [taskRows, conversationRows] = await Promise.all([
+    db.select().from(tasksTable).orderBy(desc(tasksTable.createdAt)),
+    db.select().from(conversationsTable).orderBy(desc(conversationsTable.createdAt)),
+  ])
 
-  if (taskRows.length === 0) {
+  if (taskRows.length === 0 && conversationRows.length === 0) {
     return null
   }
 
@@ -93,30 +190,135 @@ async function fetchStateFromPg(): Promise<DatabaseShape | null> {
     normalizeTaskRecord(row.payload, now, row.userId),
   )
 
-  return { tasks }
+  const conversations = conversationRows
+    .map((row: ConversationDbRow) => normalizeConversationRecord(row))
+    .filter((c: ConversationRecord | null): c is ConversationRecord => c !== null)
+
+  return { tasks, conversations }
 }
 
-async function flushStateToPg(snapshot: DatabaseShape): Promise<void> {
-  const db = getDb()
+function buildTaskInsertValues(task: TaskRuntimeRecord) {
+  return {
+    id: task.id,
+    userId: task.userId,
+    url: task.url,
+    status: task.status,
+    payload: task,
+    startedAtMs: task.startedAtMs,
+    updatedAtMs: task.updatedAtMs,
+    createdAt: new Date(Date.parse(task.createdAt) || Date.now()),
+  }
+}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await db.transaction(async (tx: any) => {
-    await tx.delete(tasksTable)
-    if (snapshot.tasks.length > 0) {
-      await tx.insert(tasksTable).values(
-        snapshot.tasks.map((task) => ({
-          id: task.id,
-          userId: task.userId,
-          url: task.url,
-          status: task.status,
-          payload: task,
-          startedAtMs: task.startedAtMs,
-          updatedAtMs: task.updatedAtMs,
-          createdAt: new Date(Date.parse(task.createdAt) || Date.now()),
-        })),
-      )
-    }
-  })
+function buildConversationInsertValues(conv: ConversationRecord) {
+  return {
+    id: conv.id,
+    userId: conv.userId,
+    title: conv.title,
+    mode: conv.mode,
+    platform: conv.platform,
+    catalogLimit: conv.catalogLimit,
+    urls: conv.urls,
+    taskIds: conv.taskIds,
+    createdAt: new Date(Date.parse(conv.createdAt) || Date.now()),
+  }
+}
+
+async function performSave(): Promise<void> {
+  if (!state) {
+    return
+  }
+
+  // 把 dirty / deleted 集合 swap 到本地,这样在写入期间产生的新 dirty
+  // 会进入下次 save(避免本次刷盘和后续 mutation 互相覆盖)。
+  const localDirtyTasks = new Set(dirtyTaskIds)
+  const localDeletedTasks = new Set(deletedTaskIds)
+  const localDirtyConvs = new Set(dirtyConvIds)
+  const localDeletedConvs = new Set(deletedConvIds)
+  dirtyTaskIds.clear()
+  deletedTaskIds.clear()
+  dirtyConvIds.clear()
+  deletedConvIds.clear()
+
+  // 没有差异就直接 return,避免空事务
+  if (
+    localDirtyTasks.size === 0 &&
+    localDeletedTasks.size === 0 &&
+    localDirtyConvs.size === 0 &&
+    localDeletedConvs.size === 0
+  ) {
+    return
+  }
+
+  // 取当前状态快照(copy),保证写库期间 worker 改 state 不会污染 upsert 的值
+  const tasksToUpsert: TaskRuntimeRecord[] = []
+  for (const id of localDirtyTasks) {
+    const task = state.tasks.find((t) => t.id === id)
+    if (task) tasksToUpsert.push({ ...task, resultItems: [...task.resultItems] })
+  }
+  const convsToUpsert: ConversationRecord[] = []
+  for (const id of localDirtyConvs) {
+    const conv = state.conversations.find((c) => c.id === id)
+    if (conv) convsToUpsert.push({ ...conv })
+  }
+
+  const db = getDb()
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await db.transaction(async (tx: any) => {
+      // 先做 delete(避免删除后又被同 id upsert 撤回 —— 互斥语义已经保证过,
+      // 但 PG 事务里按"删 → 插"顺序写更直观)
+      if (localDeletedTasks.size > 0) {
+        await tx.delete(tasksTable).where(inArray(tasksTable.id, [...localDeletedTasks]))
+      }
+      if (localDeletedConvs.size > 0) {
+        await tx
+          .delete(conversationsTable)
+          .where(inArray(conversationsTable.id, [...localDeletedConvs]))
+      }
+
+      // upsert:走单条 onConflictDoUpdate,事务里 Pipelined,代价远低于 truncate
+      for (const task of tasksToUpsert) {
+        await tx
+          .insert(tasksTable)
+          .values(buildTaskInsertValues(task))
+          .onConflictDoUpdate({
+            target: tasksTable.id,
+            set: {
+              url: task.url,
+              status: task.status,
+              payload: task,
+              startedAtMs: task.startedAtMs,
+              updatedAtMs: task.updatedAtMs,
+            },
+          })
+      }
+      for (const conv of convsToUpsert) {
+        await tx
+          .insert(conversationsTable)
+          .values(buildConversationInsertValues(conv))
+          .onConflictDoUpdate({
+            target: conversationsTable.id,
+            set: {
+              title: conv.title,
+              mode: conv.mode,
+              platform: conv.platform,
+              catalogLimit: conv.catalogLimit,
+              urls: conv.urls,
+              taskIds: conv.taskIds,
+            },
+          })
+      }
+    })
+  } catch (error) {
+    // 写库失败:把 local 集合合回 dirty/deleted,下次 save 会重试。
+    // 注意要尊重当前 dirty/deleted 已有的 id(可能在 in-flight 期间又被改过)
+    for (const id of localDirtyTasks) if (!deletedTaskIds.has(id)) dirtyTaskIds.add(id)
+    for (const id of localDeletedTasks) if (!dirtyTaskIds.has(id)) deletedTaskIds.add(id)
+    for (const id of localDirtyConvs) if (!deletedConvIds.has(id)) dirtyConvIds.add(id)
+    for (const id of localDeletedConvs) if (!dirtyConvIds.has(id)) deletedConvIds.add(id)
+    throw error
+  }
 }
 
 export async function loadDatabase(): Promise<DatabaseShape> {
@@ -130,21 +332,8 @@ export async function loadDatabase(): Promise<DatabaseShape> {
     return state
   }
 
-  state = { tasks: [] }
+  state = { tasks: [], conversations: [] }
   return state
-}
-
-async function performSave(): Promise<void> {
-  if (!state) {
-    return
-  }
-
-  // 取一次内存快照避免在 PG 写入期间被 worker 修改导致不一致。
-  const snapshot: DatabaseShape = {
-    tasks: state.tasks.map((task) => ({ ...task })),
-  }
-
-  await flushStateToPg(snapshot)
 }
 
 export async function saveDatabase(): Promise<void> {
@@ -160,7 +349,7 @@ export async function saveDatabase(): Promise<void> {
       saveInFlight = null
       if (savePending) {
         savePending = false
-        // 让出 event loop，再触发一次合并的写入
+        // 让出 event loop,再触发一次合并的写入
         setTimeout(() => {
           void saveDatabase()
         }, 50)
@@ -178,4 +367,8 @@ export async function getDatabase(): Promise<DatabaseShape> {
 // 仅供测试 / 迁移脚本使用
 export function resetInMemoryStateForTest() {
   state = null
+  dirtyTaskIds.clear()
+  deletedTaskIds.clear()
+  dirtyConvIds.clear()
+  deletedConvIds.clear()
 }

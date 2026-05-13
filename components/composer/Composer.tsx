@@ -7,24 +7,29 @@ import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { CatalogLimitPicker } from '@/components/ui/CatalogLimitPicker'
 import { PlatformPicker } from '@/components/ui/PlatformPicker'
 import { useSidebarRefresh } from '@/components/layout/SidebarRefreshContext'
+import { useCreateConversationWithTasks } from '@/hooks/useConversations'
 import {
   DEFAULT_CATALOG_LIMIT,
   DEFAULT_PLATFORM_ID,
   getPlatformLabel,
   reconcilePlatform,
 } from '@/lib/mock/platforms'
-import {
-  generateConversationId,
-  getPreferences,
-  saveConversation,
-} from '@/lib/preferences'
-import type { CatalogLimit, CollectConversation, CollectMode, NewTaskForm, Task } from '@/lib/types'
+import { getPreferences } from '@/lib/preferences'
+import type {
+  CatalogLimit,
+  CollectConversation,
+  CollectMode,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const PLACEHOLDER: Record<CollectMode, string> = {
   single: '粘贴一个或多个商品 URL（每行一个）...',
   catalog: '粘贴一个目录 / 集合 URL...',
 }
+
+// 与后端 backend/src/routes/conversations.ts:MAX_URLS_PER_CONVERSATION 对齐。
+// 前端做软上限:超出部分提示并截掉,而不是 disable 提交。
+const MAX_URLS = 50
 
 interface ComposerProps {
   embedded?: boolean
@@ -39,6 +44,7 @@ export function Composer({
 }: ComposerProps) {
   const router = useRouter()
   const bumpSidebar = useSidebarRefresh()
+  const createWithTasks = useCreateConversationWithTasks()
 
   const [mode, setMode] = useState<CollectMode>('single')
   const [text, setText] = useState('')
@@ -82,7 +88,11 @@ export function Composer({
   const validUrls = urlLines.filter((u) => /^https?:\/\//i.test(u))
   const invalidCount = urlLines.length - validUrls.length
 
-  const effectiveUrls = mode === 'catalog' ? validUrls.slice(0, 1) : validUrls
+  // 目录模式只取第 1 行;单品模式截到 50 行(与后端硬上限对齐)
+  const effectiveUrls =
+    mode === 'catalog' ? validUrls.slice(0, 1) : validUrls.slice(0, MAX_URLS)
+  const excessCount =
+    mode === 'single' && validUrls.length > MAX_URLS ? validUrls.length - MAX_URLS : 0
 
   // URL 模式检测：用户在「单品」框粘了目录链接（或反过来）时给软提示
   // 仅看会被实际提交的那部分（catalog 模式下只校验第 1 行）
@@ -113,33 +123,16 @@ export function Composer({
 
     setSubmitting(true)
     try {
-      const taskIds: string[] = []
-      for (const url of effectiveUrls) {
-        const body: NewTaskForm = { url }
-        const res = await fetch('/api/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+      // 单次 POST 同时创建会话 + N 个 task。后端做 SSRF 校验,任一 URL
+      // 通不过整批 400,前端不会留下孤儿任务。
+      const { conversation: conv }: { conversation: CollectConversation } =
+        await createWithTasks.mutateAsync({
+          title: buildTitle(mode, platform, effectiveUrls.length),
+          mode,
+          platform,
+          catalogLimit: mode === 'catalog' ? catalogLimit : null,
+          urls: effectiveUrls,
         })
-        if (!res.ok) {
-          const message = await res.text().catch(() => '')
-          throw new Error(message || `提交失败 (${res.status})`)
-        }
-        const task = (await res.json()) as Task
-        taskIds.push(task.id)
-      }
-
-      const conv: CollectConversation = {
-        id: generateConversationId(),
-        title: buildTitle(mode, platform, effectiveUrls.length),
-        mode,
-        platform,
-        catalogLimit: mode === 'catalog' ? catalogLimit : undefined,
-        urls: effectiveUrls,
-        taskIds,
-        createdAt: new Date().toISOString(),
-      }
-      saveConversation(conv)
       bumpSidebar()
       onSubmitted?.(conv)
       setText('')
@@ -233,7 +226,10 @@ export function Composer({
                 <span>
                   检测到 <span className="font-semibold text-ink">{validUrls.length}</span> 个有效链接
                   {invalidCount > 0 ? <span className="text-danger">（{invalidCount} 行无效）</span> : null}
-                  {validUrls.length > 1 ? '，将拆分为多个子任务' : ''}
+                  {excessCount > 0 ? (
+                    <span className="text-[#7a5a0e]">（超出 {MAX_URLS} 条上限,后 {excessCount} 行将被截掉）</span>
+                  ) : null}
+                  {effectiveUrls.length > 1 ? '，将拆分为多个子任务' : ''}
                 </span>
               )}
             </div>

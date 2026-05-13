@@ -123,8 +123,19 @@ export const CATALOG_PLATFORM_GROUPS: PlatformGroup[] = [
     id: 'ecommerce',
     label: '电商平台',
     options: [
-      { id: 'etsy', label: 'Etsy', icon: 'etsy' },
+      { id: '1688', label: '1688', icon: '1688' },
+      { id: 'amazon', label: 'Amazon', icon: 'amazon' },
       { id: 'aliexpress', label: 'Aliexpress', icon: 'aliexpress' },
+      { id: 'alibaba', label: 'alibaba', icon: 'alibaba' },
+      { id: 'walmart', label: 'Walmart', icon: 'walmart' },
+      { id: 'wayfair', label: 'wayfair', icon: 'wayfair' },
+      { id: 'shopee', label: 'Shopee', icon: 'shopee' },
+      { id: 'lazada', label: 'Lazada', icon: 'lazada' },
+      { id: 'ebay', label: 'ebay', icon: 'ebay' },
+      { id: 'costco', label: 'Costco', icon: 'costco' },
+      { id: 'etsy', label: 'Etsy', icon: 'etsy' },
+      { id: 'taobao', label: 'taobao', icon: 'taobao' },
+      { id: 'temu', label: 'Temu', icon: 'temu' },
     ],
   },
   {
@@ -139,12 +150,41 @@ export const CATALOG_PLATFORM_GROUPS: PlatformGroup[] = [
 ]
 
 /* ============================================================
- * 索引与查询
+ * 不可用平台列表
+ * 这些站点都依赖反爬绕过 / 登录态 / 签名,纯 HTTP 采集不可行。
+ * UI 显示为灰色不可选 + tooltip 提示原因。
+ * 即便用户绕过 UI 强行 POST,后端 platform-registry 也会回退到 'auto'。
  * ============================================================ */
+const UNSUPPORTED_PLATFORM_IDS = new Set([
+  '1688',
+  'amazon',
+  'aliexpress',
+  'alibaba',
+  'walmart',
+  'wayfair',
+  'shopee',
+  'lazada',
+  'ebay',
+  'costco',
+  'etsy',
+  'taobao',
+  'temu',
+])
+
+const UNSUPPORTED_REASON = '该平台需要登录态 / 反爬绕过,当前采集器暂不支持'
+
+function markUnsupported(option: PlatformOption): PlatformOption {
+  if (!UNSUPPORTED_PLATFORM_IDS.has(option.id)) return option
+  return { ...option, disabled: true, disabledReason: UNSUPPORTED_REASON }
+}
+
+function markGroupOptions(groups: PlatformGroup[]): PlatformGroup[] {
+  return groups.map((g) => ({ ...g, options: g.options.map(markUnsupported) }))
+}
 
 const GROUPS_BY_MODE: Record<CollectMode, PlatformGroup[]> = {
-  single: SINGLE_PLATFORM_GROUPS,
-  catalog: CATALOG_PLATFORM_GROUPS,
+  single: markGroupOptions(SINGLE_PLATFORM_GROUPS),
+  catalog: markGroupOptions(CATALOG_PLATFORM_GROUPS),
 }
 
 export function getPlatformGroups(mode: CollectMode): PlatformGroup[] {
@@ -155,7 +195,7 @@ export function getPlatformGroups(mode: CollectMode): PlatformGroup[] {
 const GLOBAL_INDEX = (() => {
   const map = new Map<string, { option: PlatformOption; group: PlatformGroup }>()
   // 单品优先（label 与目录里同 id 的预期一致）
-  for (const list of [SINGLE_PLATFORM_GROUPS, CATALOG_PLATFORM_GROUPS]) {
+  for (const list of [GROUPS_BY_MODE.single, GROUPS_BY_MODE.catalog]) {
     for (const g of list) {
       for (const o of g.options) {
         if (!map.has(o.id)) map.set(o.id, { option: o, group: g })
@@ -176,9 +216,14 @@ export function getPlatformBreadcrumb(id: string): string {
   return `${entry.group.label} · ${entry.option.label}`
 }
 
-/** 该 platform 是否在 mode 下可用 */
+/** 该 platform 是否在 mode 下可用(disabled 视为不可用) */
 export function isPlatformAvailableInMode(id: string, mode: CollectMode): boolean {
-  return getPlatformGroups(mode).some((g) => g.options.some((o) => o.id === id))
+  for (const g of getPlatformGroups(mode)) {
+    for (const o of g.options) {
+      if (o.id === id) return !o.disabled
+    }
+  }
+  return false
 }
 
 /** 切换 mode 时校正 platform：不可用就回退到 auto */

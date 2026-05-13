@@ -5,13 +5,13 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { Plus, Settings, User, Loader2, CheckCircle2, AlertCircle, Clock, History } from 'lucide-react'
 import { useSession } from 'next-auth/react'
-import { useEffect, useState } from 'react'
-import { getConversations } from '@/lib/preferences'
-import type { CollectConversation } from '@/lib/types'
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useConversations } from '@/hooks/useConversations'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
-  /** 触发刷新最近列表（提交新任务后自增） */
+  /** 提交新任务后自增，触发列表 refetch */
   refreshKey?: number
 }
 
@@ -33,12 +33,17 @@ export function Sidebar({ refreshKey = 0 }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
-  const [conversations, setConversations] = useState<CollectConversation[]>([])
+  const queryClient = useQueryClient()
+  const conversationsQuery = useConversations()
 
+  // 兼容现有 SidebarRefreshContext：Composer 提交后 bump 一下
+  // useCreateConversation 已经更新 ['conversations'] 缓存，这里 invalidate 是冗余但安全的兜底。
   useEffect(() => {
-    setConversations(getConversations())
-  }, [refreshKey, pathname])
+    if (refreshKey === 0) return
+    void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+  }, [refreshKey, queryClient])
 
+  const conversations = conversationsQuery.data ?? []
   const recent = conversations.slice(0, MAX_RECENT)
   const userName = session?.user?.name ?? '我'
   const userImage = session?.user?.image ?? null

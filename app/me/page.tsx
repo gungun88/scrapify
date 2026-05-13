@@ -6,13 +6,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { LogOut } from 'lucide-react'
 import { CatalogLimitPicker } from '@/components/ui/CatalogLimitPicker'
 import { PlatformPicker } from '@/components/ui/PlatformPicker'
+import { useConversations } from '@/hooks/useConversations'
 import { useTasks } from '@/hooks/useTasks'
 import {
   DEFAULT_CATALOG_LIMIT,
   DEFAULT_PLATFORM_ID,
   reconcilePlatform,
 } from '@/lib/mock/platforms'
-import { getConversations, getPreferences, savePreferences } from '@/lib/preferences'
+import { getPreferences, savePreferences } from '@/lib/preferences'
 import type { CollectMode, UserPreferences } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -187,37 +188,19 @@ function PreferencesTab() {
 /* ====================== 使用统计 ====================== */
 function UsageTab() {
   const tasksQuery = useTasks()
-  const [convCount, setConvCount] = useState(0)
-
-  useEffect(() => {
-    setConvCount(getConversations().length)
-  }, [])
+  const conversationsQuery = useConversations()
+  const convCount = conversationsQuery.data?.length ?? 0
 
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data])
   const totalItems = useMemo(
     () => tasks.filter((t) => t.status === 'done').reduce((s, t) => s + t.itemCount, 0),
     [tasks],
   )
-  const QUOTA = 5000
-  const percent = Math.min(100, Math.round((totalItems / QUOTA) * 100))
 
   return (
-    <Section title="本月使用" desc="跨设备配额，月初自动重置。">
-      <div className="mb-2 flex items-end justify-between text-[14.5px]">
-        <span className="text-ink-muted">已采集商品</span>
-        <span>
-          <span className="text-[21px] font-semibold text-ink">
-            {totalItems.toLocaleString('en-US')}
-          </span>
-          <span className="text-ink-subtle"> / {QUOTA.toLocaleString('en-US')}</span>
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-pill bg-surface-soft">
-        <div className="h-full bg-ink transition-all" style={{ width: `${percent}%` }} />
-      </div>
-      <div className="mt-1 text-[13.5px] text-ink-subtle">{percent}% 已使用</div>
-
-      <div className="mt-6 grid grid-cols-2 gap-3">
+    <Section title="使用情况" desc="当前账号累计统计。">
+      <div className="grid grid-cols-3 gap-3">
+        <Tile label="已采集商品" value={totalItems.toLocaleString('en-US')} />
         <Tile label="任务总数" value={String(tasks.length)} />
         <Tile label="会话次数" value={String(convCount)} />
       </div>
