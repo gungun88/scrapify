@@ -59,6 +59,155 @@
 
 ## 2. 开发记录
 
+## 2026-05-13 第 27 次整理：多用户上线加固（安全 + 并发瓶颈消除）
+
+> 目标:让代码库可以安全地对公网开放、支撑多用户并发使用。
+> 计划文件:`C:\Users\Administrator\.claude\plans\wild-crafting-tome.md`
+
+### P0 安全（上线阻断项）
+
+- **SSRF 防护**：新建 `backend/src/services/url-guard.ts`，所有 `task-runtime.ts` 的 `fetch(...)` 统一改走 `safeFetch(...)`。私有/保留 IPv4 段（10/8、127/8、169.254/16、192.168/16、172.16/12、CGNAT、TEST-NET、组播、保留段）+ IPv6（::1、fc00::/7、fe80::/10、IPv4-mapped）+ 容器内网域名（postgres / redis / backend / caddy / frontend）+ `localhost` 字面量全部拒绝。DNS 二次解析防 rebinding。重定向限 3 跳，每跳重做校验。入口 `/api/tasks` POST 和 `/api/conversations/with-tasks` 都先过校验，坏 URL 不进 worker。
+- **HMAC 加时间戳防重放**：`X-User-Sig` 签名 message 从 `sub|email|name|image` 改为 `sub|email|name|image|ts`，新增 `X-User-Ts` header。后端窗口 5 分钟，超过即拒。前后端一次性升级（无兼容期）。
+- **输入大小限制**：Fastify `bodyLimit: 64KB`；单 URL ≤ 2048 字符；单次会话 URL ≤ 50 个；title ≤ 200 字符（截断不拒绝）。Composer 前端同步加 50 URL 软上限提示。
+- **401 文案归并**：missing credentials / invalid signature / ts out of window 三类统一返回 `{ message: 'Unauthorized' }`，避免给攻击者枚举 header 名称的便利。具体原因写到服务端日志（已 redact）。
+- **日志 redact**：Fastify logger 配置 `redact.paths`，把 `x-user-*` 全套 header、`authorization`、`cookie` 都换成 `[REDACTED]`。upsert 错误日志不再带完整 err 对象，只记 `message + code`，避免 SQL/参数泄露。
+- **CORS 硬化**：`backendConfig.assertBackendConfig()` 启动时校验 `BACKEND_CORS_ORIGIN` 必须是具体 origin，不允许 `*` 或空。同步校验 `SCRAPIFY_BACKEND_HMAC_SECRET` 非空。
+
+### P1 数据正确性
+
+- **`fetchStateFromPg` 加排序**：两个 select 加 `orderBy(desc(createdAt))`，保证重启后会话/任务在内存里是最新优先，conversations 的"超出 200 条裁老的"逻辑在重启后仍正确。
+- **删会话级联清理**：`DELETE /api/conversations/:id` 同时清理关联的 task。worker 没在跑的直接 `markTaskDeleted`；正在跑的标 error（`abortActiveTask`）让 worker `finally` 自然完成 —— 不再留孤儿任务。导出 `isTaskActive` / `abortActiveTask` 让 routes 协调 worker。
+- **Composer 原子化提交**：新增后端端点 `POST /api/conversations/with-tasks`，先做 URL 解析 + SSRF 校验（任一失败整批 400），再一次性创建 task + 会话 + 一次 `saveDatabase()`。前端 Composer 删除 N 次 POST 循环，改用单次 `useCreateConversationWithTasks`。新建前端代理 `app/api/conversations/with-tasks/route.ts`。
+- **mode CHECK 约束**：schema 给 `conversations.mode` 加 `CHECK (mode IN ('single','catalog'))`。Drizzle 生成 `0005_nebulous_vindicator.sql`。
+
+### P2 可扩展性（多用户阻断项）
+
+- **`saveDatabase` 重构为行级 upsert/delete**：废除 truncate+insert 模式。新增 `markTaskDirty` / `markTaskDeleted` / `markConversationDirty` / `markConversationDeleted` 四个差异标记函数，`performSave()` swap 出 dirty 集合后只 upsert 这些 id、按 id `inArray` 删除。所有写入点（`task-runtime.ts` 的 markTaskRunning/Done/Error/Heartbeat/reportCollectorProgress、routes/tasks.ts POST、routes/conversations.ts POST/DELETE）改造完成。写库失败时把 local dirty 还原到全局 dirty，下次 save 重试。心跳里 `updateRunningHeartbeat` 只在 elapsed 秒级变化时才 markDirty，避免无意义刷盘。
+- **速率限制按用户 + 分级**：`keyGenerator` 优先用 `x-user-sub` 当 bucket（已登录用户），降级用 IP。全局默认从 100 提到 200/min/user。敏感写入端点路由级单独配置：`POST /api/conversations/with-tasks` 20/min、`POST /api/conversations` 20/min、`DELETE /api/conversations/:id` 30/min、`POST /api/tasks` 30/min、`GET /api/tasks` 120/min（前端 2s 轮询 ~30 次/min 留余量）。
+
+### P3 运维 / 文档
+
+- `.env.production.example` `POSTGRES_PASSWORD` 加注释：必须 `[A-Za-z0-9]`，避免 URL 特殊字符破坏连接串；加 `BACKEND_CORS_ORIGIN` 可选覆盖示例。
+- `deploy/README.md` 第 5 节加 `0005` 迁移说明：升级前可 `SELECT DISTINCT mode FROM conversations` 检查是否有非法历史值。
+- `.env.example` 限流默认从 100 提到 200，注释说明分级限流策略。
+
+### 清理
+
+- 删除孤儿 `hooks/useCreateTask.ts` 和 `lib/store/taskStore.ts`（Composer 已经不再用它们；保留只会让人误读）。
+
+### 验证
+
+`npm run backend:check`、`npm run lint`、`npm run build` 全通过。手动端到端验证（用 PGlite + ioredis-mock + 自签 HMAC 脚本）共 12 项全过：
+
+1. ✅ `/api/health` 公开放行 200
+2. ✅ 无签名 → 401
+3. ✅ 签名 ts 偏离 6 分钟 → 401
+4. ✅ 错签 → 401
+5. ✅ 合法请求 → 200
+6. ✅ SSRF 6 例（loopback/localhost/192.168/169.254.169.254/10.x/ftp 协议）全部 400
+7. ✅ `with-tasks` 含一个内网 URL → 整批 400
+8. ✅ `with-tasks` 合法多 URL → 201 一次返回 conversation + tasks
+9. ✅ user-A 看不到 user-B 的会话（tenant isolation）
+10. ✅ user-B 删 user-A 的会话 → 404
+11. ✅ 删会话级联：task 数 2 → 0
+12. ✅ 51 个 URL → 400；行级 upsert 不误伤别的用户的会话
+
+### 已知遗留 / 下一步
+
+- 没有自动化测试框架。task-runtime.ts 的 collector 分支应单独立项加 snapshot 测试。
+- Caddy 没加 CSP；可在 Caddyfile 后续追加，本期没动部署链路。
+- HMAC 没加 body hash，依赖网络隔离 + 5 分钟时间窗。如果未来后端 HMAC secret 有泄露风险（外部日志聚合、备份），考虑升级为 sha256(sub|...|ts|bodyHash)。
+
+
+## 2026-05-12 第 26 次整理：Phase 4 Docker 化部署 + 收掉 me 页假配额
+
+> Phase 1（鉴权）与第 25 次整理（会话上后端）落定后，功能层面已经具备公网上线的条件，但实际部署没有任何脚手架——开发还停在 `npm run backend:dev` + `npm run dev` 双进程的本机模式。这一轮把生产部署链路从零搭起来：单一 VPS + Docker Compose + Caddy 自动 HTTPS。
+>
+> 同时顺手收掉 `me` 页的 `QUOTA = 5000` 硬编码——Phase 2 额度系统目前用不上（项目前期没人付费），先把"显示有配额但其实没有"的虚假 UI 拆掉，等真要做时再加回来。
+
+### D：me 页假配额下线
+
+- ~~`app/me/page.tsx` `UsageTab` 重写：移除 `QUOTA = 5000` 常量、`/ N` 上限文案、进度条 + "X% 已使用"行；改成三列 `Tile`（已采集商品 / 任务总数 / 会话次数）单纯展示当前累计~~
+- ~~Section 标题从"本月使用"改为"使用情况"，去掉"跨设备配额，月初自动重置"误导性描述（实际后端没有 monthly reset 逻辑）~~
+
+### A：Phase 4 Docker 化
+
+**核心策略：单域名进 Caddy，反代到 frontend；backend / postgres / redis 全在 compose 内部网络里，绝不直接对外暴露**——这跟现有"前端 `app/api/*` 是唯一受信入口、自带 HMAC 签名"的设计天然吻合，Caddy 配置因此极简（一行 `reverse_proxy frontend:3000`）。
+
+- ~~`next.config.mjs` 加 `output: 'standalone'`：`next build` 会把运行时最小依赖打到 `.next/standalone/server.js`，Dockerfile 不再需要拷 node_modules~~
+- ~~`Dockerfile.frontend` 三阶段：deps（npm ci 全量装） → builder（next build） → runner（拷 `.next/standalone` + `.next/static` + `public/`，非 root `nextjs:1001` 运行，CMD `node server.js`）~~
+- ~~`Dockerfile.backend` 三阶段：deps → builder（`tsc -p backend/tsconfig.json` → `backend/dist`）→ runner（拷 dist + 全量 node_modules 含 drizzle-kit + `backend/src/db/migrations/` + `backend/src/db/schema.ts` + `backend/src/env-loader.ts` + `backend/drizzle.config.ts`）~~
+- 关键设计权衡：runner 保留全量 `node_modules`（而不是 prod-only prune），原因是 `prod:migrate` 子命令要靠 `drizzle-kit migrate`，drizzle-kit 是 devDependencies；同时 drizzle.config.ts 在容器里用 esbuild 实时编译 TS，需要 schema.ts / env-loader.ts 源文件在场
+- ~~`docker-compose.prod.yml`：5 个服务（caddy / frontend / backend / postgres:16-alpine / redis:7-alpine）+ 4 个命名卷（pg / redis / caddy_data / caddy_config）+ 1 个 bridge network；只暴露 80/443~~
+- ~~Caddy / frontend 都通过 `depends_on.condition: service_healthy` 等 backend 起来；backend 自己等 postgres + redis；backend healthcheck 用 `wget` 打 `/api/health`（公开端点，不需要 HMAC）~~
+- ~~AUTH_TRUST_HOST=true：反代后 NextAuth v5 必须打开这个开关，否则 cookie 域 / callback URL 都对不上~~
+- ~~`Caddyfile` 单域名块：自动 Let's Encrypt + zstd/gzip + 标准安全头（HSTS / X-Content-Type-Options / X-Frame-Options / Referrer-Policy）+ 去掉 `Server` header~~
+- ~~`.env.production.example` 列出所有必填变量：`DOMAIN / AUTH_URL / AUTH_SECRET / AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET / SCRAPIFY_BACKEND_HMAC_SECRET / POSTGRES_PASSWORD`，每个都附 `openssl rand` 生成命令~~
+- ~~`deploy/README.md` 写完整上线手册：9 节涵盖装 Docker / 配 env / DNS / 首次启动 / 跑迁移 / 验证 / 日常运维（更新 / 看日志 / 备份） / 8 类常见故障 / 安全清单~~
+- ~~`.dockerignore` 新增：排除 `node_modules / .next / .dev-pg-data / .env / *.md / .git / docker 自身文件`，让 build context 小一些 + 防止 dev 数据 / secret 进镜像~~
+- ~~`package.json` 新增 4 个便捷脚本：`prod:up`（build+up -d）/ `prod:down` / `prod:logs` / `prod:migrate`~~
+- ~~`CLAUDE.md` 加 "Production deploy (Phase 4)" 段，写清生产架构 + 4 个 npm 脚本~~
+
+### 关键设计决策（动手前的复盘）
+
+- **后端为什么不直接对外暴露**：第 24 次整理收尾 Phase 1 时已经设计成"前端 `app/api/*` 用 HMAC 签 `X-User-*` header 后转发，后端 `requireUser` 验签"——这本来就把后端定位成"只接受签过名的请求"的内部服务。生产环境继续维持这个边界：Caddy 只反代到 frontend，backend 通过 docker 网络访问，公网无法触达，HMAC 仅作为 defense in depth
+- **为什么不在 backend 启动时自动跑迁移**：PGlite（dev）自动跑迁移没问题——它是单进程嵌入式。但生产用真 PG，多个 backend 实例同时启动会争抢迁移锁；把迁移留给 `prod:migrate` 一次性命令，运维显式控制，安全得多
+- **为什么 drizzle-kit 留在 runner 镜像里**：考虑过两种替代——(a) 写个手搓的 `migrate.ts` 直接用 `drizzle-orm/node-postgres/migrator`，但要额外维护一个迁移入口；(b) 用 init container 跑迁移，又多一个 service。直接留 drizzle-kit 最简单，代价是镜像多 ~20MB，可接受
+- **本地旧 localStorage 数据**：不做迁移（同第 25 次决策）
+
+### 验证
+
+- ~~`npm run build` 通过，`.next/standalone/server.js` 产出正常，路由表完整~~
+- ~~`npm run backend:check` 通过~~
+- ~~`npm run lint` 通过（0 warning）~~
+- 未完成事项：本机 Windows 上没装 docker，未跑 `docker build -f Dockerfile.frontend .` / `docker build -f Dockerfile.backend .` 验证 Dockerfile 真能 build；用户在自己有 docker 的环境（VPS 或 dev WSL）首次 `prod:up` 时可能踩到 Alpine `libc6-compat` / Node 版本细节差异，按 `deploy/README.md` 故障表排查
+- 未完成事项：真实 VPS 端到端冒烟（DNS → Caddy 申请证书 → Google OAuth 走通 → 创建任务 → 完成 → 导出 CSV）由用户在自己的 VPS 上跑；deploy/README.md 第 4-6 节是逐步指引
+
+## 2026-05-11 第 25 次整理：会话记录上后端（跨设备同步 / Phase 1 收尾的剩余口）
+
+> 第 24 次整理把 Phase 1 鉴权链路打通后，唯一还停留在 localStorage 的就是 `CollectConversation`——也就是首页"最近常用"、Sidebar 最近列表、Records 列表、Me 页"会话次数"统计全部依赖的那个对象。用户在浏览器 A 提交完，换浏览器 B 看不到任何历史。本次把它搬到后端按 `user_id` 隔离存储，跨设备同步打通。
+
+### 后端
+
+- ~~`backend/src/db/schema.ts` 新增 `conversations` 表：`id` (PK) / `user_id` (FK→users, on delete cascade) / `title` / `mode` / `platform` / `catalog_limit` (jsonb，因为类型是 `number | 'all' | null`) / `urls` (jsonb string[]) / `task_ids` (jsonb string[]) / `created_at`；列表查询走 `(user_id, created_at desc)` 索引~~
+- ~~`backend/src/db/migrations/0004_puzzling_zaladane.sql` 由 `drizzle-kit generate` 产出：仅 `CREATE TABLE conversations` + 一个 FK + 一个索引，纯加表无破坏改动~~
+- ~~`backend/src/types.ts` 新增 `CollectMode` / `CatalogLimit` / `ConversationRecord` / `NewConversationForm`；`DatabaseShape` 扩为 `{ tasks, conversations }`~~
+- ~~`backend/src/services/data-store.ts` 同步扩展：`fetchStateFromPg` 并发拉 tasks + conversations 两张表；`flushStateToPg` 事务里两张表一起 truncate+insert；新增 `normalizeConversationRecord(row)` 守住 PG → 内存的字段类型；`loadDatabase` 空 state 初始化 `conversations: []`；空 PG 的判断改成"两张表都为空才回退到空 state"~~
+- ~~`backend/src/routes/conversations.ts` 新增三个 handler：`GET /api/conversations` 按 `userId` 过滤并 `createdAt desc`、`POST /api/conversations`（带 body 校验，每用户硬上限 200 条，超过自动淘汰最旧）、`DELETE /api/conversations/:id`；id 由后端用 `crypto.randomUUID().slice(0,12)` 生成（前端不再控制 id）~~
+- ~~`backend/src/server.ts` 注册新路由（与 tasks/users 同样走全局 `requireUser` hook）~~
+
+### 前端
+
+- ~~`lib/types/index.ts` `CollectConversation.catalogLimit` 由 `CatalogLimit | undefined` 改为 `CatalogLimit | null | undefined`（后端始终回 `null` 或值）；新增可选 `userId`、新增 `NewConversationForm` 类型~~
+- ~~`app/api/conversations/route.ts` 与 `app/api/conversations/[id]/route.ts` 走 `proxyAuthenticated`（同 tasks 代理一致），自动带 X-User-\* HMAC~~
+- ~~`hooks/useConversations.ts` 新增：`useConversations()` (`useQuery`) / `useCreateConversation()` / `useDeleteConversation()`；mutation 成功后直接 `setQueryData` 改 `['conversations']` 缓存，省去一次 round-trip 的 invalidate~~
+- ~~`components/composer/Composer.tsx`：移除 `generateConversationId` / `saveConversation` 调用，改为 `createConversation.mutateAsync(form)`；`catalogLimit` 序列化由 `undefined` 改为 `null`（后端只看 null/值）~~
+- ~~`components/layout/Sidebar.tsx`、`app/page.tsx`、`app/records/page.tsx`、`app/me/page.tsx` 全部从 `useEffect + getConversations()` 改为 `useConversations()` hook；Sidebar 保留 `refreshKey` 兼容旧 `SidebarRefreshContext`——bump 时显式 invalidate 一次作为兜底~~
+- ~~`app/records/page.tsx` 的删除路径：`deleteConversation()` + `setConversations(getConversations())` 改为单个 `deleteMutation.mutate(id)`，乐观更新走 mutation 的 `setQueryData`~~
+- ~~`lib/preferences.ts` 削掉一半：删除 `getConversations` / `getConversation` / `saveConversation` / `deleteConversation` / `generateConversationId` 与 `CONVERSATIONS_KEY` 常量；仅保留 `getPreferences` / `savePreferences`（platform / defaultMode / catalogLimit 仍是设备级偏好，留在 localStorage 合理）~~
+- ~~两处 `useMemo` deps 不稳定的 lint 警告修掉：`conversations = data ?? []` 用 `useMemo` 包，避免 `[]` 字面量每次重新分配触发依赖比较~~
+
+### 关于本地旧 localStorage 数据的处置
+
+- 不做迁移。`scrapify:conversations:v2` key 自然失效但不主动清除，避免用户切回老版本时数据丢失；新版前端从不读它，老条目自然消亡
+- 用户在浏览器 A 上以前积累的本地会话**不会**自动同步到后端；这是已知行为，不算回归
+
+### 顺手：修 `lib/auth.ts` 的 next-auth/jwt augmentation
+
+> 上轮第 24 次整理留了个尾巴：`npx tsc` 和 `next build` 都报 `Invalid module name in augmentation, module 'next-auth/jwt' cannot be found.` + 衍生的 `session.user.id` 类型错。本次顺手解。
+
+- ~~根因：next-auth v5 (`5.0.0-beta.31`) 把 `next-auth/jwt` 做成 `@auth/core/jwt` 的纯 re-export（`export * from "@auth/core/jwt"`）。tsc 在 `moduleResolution: "bundler"` + 没有任何实际 `import` 路径触达 `next-auth/jwt` 时，不会把它纳入模块图，`declare module 'next-auth/jwt'` 因此找不到目标，augmentation 全部失败 → `token.googleSub` 落回 `unknown`，`session.user.id = token.googleSub ?? token.sub ?? ''` 推断成 `{}` 不可赋给 `string`~~
+- ~~修法：`declare module` 目标改为底层的 `@auth/core/jwt`（v5 augmentation 已知 pattern），同时在文件顶部加 `import type { JWT } from 'next-auth/jwt'` 让 tsc 把 next-auth/jwt 拉进模块图，augmentation 通过 re-export 链自然生效~~
+
+### 验证
+
+- ~~`npm run db:generate` 通过：仅生成 `0004_puzzling_zaladane.sql`，无破坏现有 schema~~
+- ~~`npm run backend:check` 通过~~
+- ~~`npm run lint` 通过（修掉 useMemo 警告后）~~
+- ~~`npx tsc --noEmit -p tsconfig.json` 通过（顺手修了上轮遗留的 `lib/auth.ts` 两个 next-auth/jwt augmentation 错误）~~
+- ~~`npm run build` 通过~~
+- 未完成事项：浏览器端到端冒烟（登录 → 提交 → 出现在 Records → 换浏览器登录同账号 → 仍能看到 → 删除 → 双端同步消失）由用户在自己的环境跑
+
 ## 2026-05-11 第 24 次整理：清理对话式 UI 切换后遗留的旧后端代码
 
 > 产品形态从"6 页 SaaS 控制台"切换到"对话式采集器"已经一段时间，前端只剩 `/`、`/records`、`/me`，但后端仍维护一整套为旧前端准备的字段、路由和辅助代码。本次复盘把"产出但无人消费"的部分一次性清掉，让前后端契约对齐到当前真实使用面。
@@ -565,8 +714,8 @@
 ### 前端优先项
 
 - ~~决定 schedule / monitor / proxy / analytics 是否在对话式形态下重新提供入口~~（第 21 次整理已选择整体下线，方案 A）
-- 会话记录跨设备同步：`CollectConversation` 当前仅 localStorage，需要在 Phase 1 落地后搬到后端按 user_id 存储
-- `me` 页硬编码替换：用户名 / 邮箱 / "已加入 30 天" / 月度配额 5000 等待 Phase 1 / Phase 2 接真实数据
+- ~~会话记录跨设备同步~~（第 25 次整理已落地：后端 `conversations` 表 + `/api/conversations` 三件套 + `useConversations` hook）
+- ~~`me` 页硬编码替换：用户名 / 邮箱 / "已加入 30 天" 已从 NextAuth session 读取（第 24 次完成）；`QUOTA = 5000` 假上限于第 26 次整理拆除（项目前期没人付费，Phase 2 暂不做）~~
 
 ### 后端优先项
 
@@ -576,8 +725,9 @@
 ### 生产化项（沿用 Launch Spec 七阶段）
 
 - Phase 1：鉴权 / 多租户（users / sessions / email_verifications / password_resets + JWT + 邮件 + middleware）
-- Phase 2：额度系统（quota_plans / usage_counters + 创建前 checkQuota）
+- Phase 2：额度系统（quota_plans / usage_counters + 创建前 checkQuota）—— 前期没人付费，**已暂缓**
 - Phase 3：采集走代理池 + 失败重试（BullMQ）+ 写接口/登录精细限流
+- ~~Phase 4：Dockerfile + docker-compose.prod + Caddy + deploy/README~~（第 26 次整理已落地，未完成事项见该节"未完成"标记）
 - Phase 4：Dockerfile + docker-compose.prod + Caddy + deploy/README
 - Phase 5：pino 日志 + Sentry + Turnstile + 安全头 + CSRF
 - Phase 6：Vitest 单测 + Playwright e2e + GitHub Actions

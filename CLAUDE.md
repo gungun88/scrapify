@@ -15,18 +15,18 @@ Browser ── Next.js (3000) ─proxy─▶ Fastify backend (8787) ─▶ Postg
 
 - Next.js 14 App Router, TypeScript strict mode, Tailwind. Path alias `@/*` → repo root.
 - Product is a **conversational collector** (post 2026-05-05 rewrite). Only three pages remain: `/` (Composer landing), `/records`, `/me`. The old `/c/[id]` conversation detail page was removed on 2026-05-11 — submitting now routes straight to `/records`. Older "SaaS console" pages (tasks/schedule/fields/analytics/monitor/proxy) were deleted — do not assume they exist; `scrapify-dev-spec.md` and the "已完成历史" section of `scrapify-progress.md` describe that obsolete shape.
-- `app/api/*` is **only a thin proxy layer**. It forwards to the Fastify backend via `lib/server/backend.ts` using `SCRAPIFY_BACKEND_BASE_URL`. There is **no fallback to mock data** — if the backend isn't running, frontend API routes return 503. Only `tasks` and `fields` proxies still exist.
-- Conversation history & user prefs live in `localStorage` via `lib/preferences.ts` (no server-side user model yet).
+- `app/api/*` is **only a thin proxy layer**. It forwards to the Fastify backend via `lib/server/backend.ts` using `SCRAPIFY_BACKEND_BASE_URL`. There is **no fallback to mock data** — if the backend isn't running, frontend API routes return 503. Only `tasks` and `conversations` proxies exist.
+- User prefs (platform / defaultMode / catalogLimit) live in `localStorage` via `lib/preferences.ts`. Conversations were moved to the backend on 2026-05-11 — fetch via `hooks/useConversations.ts`, no longer touched from `lib/preferences.ts`.
 - TanStack Query (`hooks/useTasks.ts`, `hooks/useTasksByIds.ts`) polls `/api/tasks` to drive progress UI. Zustand stores in `lib/store/` are mostly UI state.
 
 ### Backend (`backend/src/`)
 
-- Entry: `backend/src/server.ts` → `initDb()` → `loadDatabase()` → `startTaskWorker()` → register routes (`health`, `tasks`, `fields`). The task worker is started inside the API process — there's no separate worker binary.
+- Entry: `backend/src/server.ts` → `initDb()` → `loadDatabase()` → `startTaskWorker()` → register routes (`health`, `users`, `tasks`, `conversations`). The task worker is started inside the API process — there's no separate worker binary.
 - **Dual-driver DB client** (`backend/src/db/client.ts`):
   - `DATABASE_URL=pglite://./.dev-pg-data` (default) → embedded PGlite, persists to `.dev-pg-data/`. PGlite migrations are auto-applied on boot. Stale `postmaster.pid` is auto-removed at startup so a hard-killed dev server doesn't brick the next launch.
   - `DATABASE_URL=postgres://...` → real Postgres via `pg` + `drizzle-orm/node-postgres`. Migrations must be applied manually with `npm run db:migrate`.
   - `REDIS_URL=mock://` (default) → `ioredis-mock`; `redis://...` → real Redis. Used by `@fastify/rate-limit`.
-- **Schema is intentionally minimal** (`backend/src/db/schema.ts`): two tables only — `users` (Phase 1, OAuth account upsert) and `tasks`. The full `TaskRuntimeRecord` (result preview etc.) is stored as JSONB in `tasks.payload` — not normalized into separate tables.
+- **Schema is intentionally minimal** (`backend/src/db/schema.ts`): three tables — `users` (Phase 1 OAuth upsert), `tasks` (full `TaskRuntimeRecord` stored as JSONB in `tasks.payload`), and `conversations` (the "one submission" aggregate: title / mode / platform / catalogLimit / urls / taskIds, all by `user_id`).
 - **In-memory state pattern** (`services/data-store.ts`): the backend keeps a single `state: DatabaseShape` in process memory. Reads return that object; mutations are made in place by routes/worker, then `saveDatabase()` flushes the whole snapshot to PG inside a transaction. Concurrent saves coalesce (in-flight + pending flag) to avoid N×truncate-insert from heartbeat ticks.
 - **Task runtime** (`services/task-runtime.ts`, ~1100 lines): the actual scraper. The pipeline tries four sources in order: `shopify-products-json` → `woocommerce-store-api` → `sitemap-html` → `html-structured-data` (JSON-LD / `__NEXT_DATA__`). Worker tick is 3s, max 2 concurrent tasks per process. All status/progress changes go through helpers in this file — don't mutate `TaskRuntimeRecord` directly from routes. Per-page progress + heartbeat is centralized in `reportCollectorProgress`.
 - **Type duplication is intentional**: `lib/types/index.ts` (frontend) and `backend/src/types.ts` (backend) are kept structurally identical. When changing the API contract, update both.
@@ -58,6 +58,12 @@ Browser ── Next.js (3000) ─proxy─▶ Fastify backend (8787) ─▶ Postg
 ### Infrastructure (only when switching off PGlite/mock)
 
 - `npm run infra:up` / `npm run infra:down` — start/stop the Postgres + Redis containers in `docker-compose.dev.yml`. After bringing them up, set `DATABASE_URL=postgres://scrapify:scrapify_dev@localhost:5432/scrapify` and `REDIS_URL=redis://localhost:6379` in `.env`, then `npm run db:migrate`.
+
+### Production deploy (Phase 4)
+
+- Production runs via `docker-compose.prod.yml` (Caddy + frontend + backend + Postgres + Redis). Only ports 80/443 are exposed; the backend is **never** directly reachable from outside — the frontend `app/api/*` HMAC-signed proxy is the single entry point.
+- `Dockerfile.frontend` is multi-stage and relies on `output: 'standalone'` in `next.config.mjs` (`server.js` is the runtime entry). `Dockerfile.backend` ships `backend/dist` plus the `migrations/` and `drizzle.config.ts` so `npm run prod:migrate` can run `drizzle-kit migrate` inside the container.
+- Day-to-day: `npm run prod:up` / `prod:down` / `prod:logs` / `prod:migrate`. Full bootstrap is in `deploy/README.md`. Required env is `.env.production.example`.
 
 ### Running a single test
 
