@@ -1,0 +1,125 @@
+# Scrapify 生产编排
+# ----------------------------------------------------------
+# 5 个服务：caddy（反代+HTTPS）/ frontend（Next.js）/ backend（Fastify）
+#          / postgres / redis
+#
+# 公开端口只开 80 + 443；frontend、backend、pg、redis 都只在内部网络通信。
+# 后端永远不直接对外暴露——前端 app/api/* 是唯一入口，自带 HMAC 签名。
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: scrapify-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # ACME 证书 / TLS 状态
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}        # Caddyfile 通过 {$DOMAIN} 读取
+    depends_on:
+      - frontend
+    networks:
+      - scrapify-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: scrapify-frontend
+    container_name: scrapify-frontend
+    restart: unless-stopped
+    environment:
+      # NextAuth
+      AUTH_URL: ${AUTH_URL}
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET}
+      # 前端 → 后端代理
+      SCRAPIFY_BACKEND_BASE_URL: http://backend:8787
+      SCRAPIFY_BACKEND_PREFIX: /api
+      SCRAPIFY_BACKEND_HMAC_SECRET: ${SCRAPIFY_BACKEND_HMAC_SECRET}
+      # NextAuth 的 trusted host（部署在反代后必需）
+      AUTH_TRUST_HOST: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - scrapify-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: scrapify-backend
+    container_name: scrapify-backend
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      BACKEND_CORS_ORIGIN: ${AUTH_URL}
+      DATABASE_URL: postgres://scrapify:${POSTGRES_PASSWORD}@postgres:5432/scrapify
+      REDIS_URL: redis://redis:6379
+      SCRAPIFY_BACKEND_HMAC_SECRET: ${SCRAPIFY_BACKEND_HMAC_SECRET}
+      RATE_LIMIT_GLOBAL_PER_MIN: ${RATE_LIMIT_GLOBAL_PER_MIN:-100}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # /api/health 是公开端点，无需 HMAC
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8787/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - scrapify-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: scrapify-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scrapify
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: scrapify
+    volumes:
+      - scrapify_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scrapify -d scrapify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scrapify-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: scrapify-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - scrapify_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scrapify-net
+
+volumes:
+  scrapify_pg:
+  scrapify_redis:
+  caddy_data:
+  caddy_config:
+
+networks:
+  scrapify-net:
+    driver: bridge

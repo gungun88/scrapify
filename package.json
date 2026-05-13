@@ -21,7 +21,11 @@
     "db:studio": "drizzle-kit studio --config backend/drizzle.config.ts",
     "db:reset": "node -e \"const fs=require('fs'); fs.rmSync('.dev-pg-data',{recursive:true,force:true}); console.log('removed .dev-pg-data')\"",
     "infra:up": "docker compose -f docker-compose.dev.yml up -d",
-    "infra:down": "docker compose -f docker-compose.dev.yml down"
+    "infra:down": "docker compose -f docker-compose.dev.yml down",
+    "prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",
+    "prod:down": "docker compose -f docker-compose.prod.yml down",
+    "prod:logs": "docker compose -f docker-compose.prod.yml logs -f --tail 200",
+    "prod:migrate": "docker compose -f docker-compose.prod.yml exec backend npx drizzle-kit migrate --config backend/drizzle.config.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.5",

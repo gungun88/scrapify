@@ -1,0 +1,29 @@
+# Scrapify Caddy 反代配置
+# ----------------------------------------------------------
+# 单一域名 → frontend:3000
+# 后端 backend:8787 不直接对外暴露：前端 app/api/* 已经是唯一入口，
+# 自带 HMAC 签名转发，无需在 Caddy 这层再开一个 /api proxy。
+#
+# Caddy 自动用 Let's Encrypt 申请 HTTPS 证书（首次启动需 80/443 端口开放）。
+# 域名通过 {$DOMAIN} 环境变量从 docker-compose 注入。
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Next.js Image Optimization / static 资源由 Next 自己处理
+	reverse_proxy frontend:3000
+
+	# 安全头（轻量，按需追加 CSP）
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

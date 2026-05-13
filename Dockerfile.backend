@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1.7
+# ============================================================
+# Scrapify · 后端镜像（Fastify + Drizzle + tsc）
+# 多阶段构建：deps → builder → runner
+# ============================================================
+
+ARG NODE_VERSION=20-alpine
+
+# ---------- deps：装全套依赖（drizzle-kit 在迁移时仍要用，留在镜像里） ----------
+FROM node:${NODE_VERSION} AS deps
+WORKDIR /app
+RUN apk add --no-cache libc6-compat
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+# ---------- builder：tsc 编译后端 ----------
+FROM node:${NODE_VERSION} AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json tsconfig.json ./
+COPY backend ./backend
+RUN npm run backend:build
+
+# ---------- runner：最小运行时 ----------
+FROM node:${NODE_VERSION} AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8787
+ENV HOST=0.0.0.0
+
+# 非 root 运行
+RUN addgroup -g 1001 -S nodejs && adduser -S fastify -u 1001 -G nodejs
+
+# 必要的 node_modules（drizzle-kit 留着以便 `db:migrate` 子命令）
+COPY --from=deps --chown=fastify:nodejs /app/node_modules ./node_modules
+COPY --chown=fastify:nodejs package.json ./
+
+# 后端源码：dist 用于 server.js；src + drizzle.config.ts 用于 drizzle-kit migrate
+# (drizzle.config.ts import 了 src/env-loader.ts，drizzle-kit 通过 esbuild 实时编译 TS)
+COPY --from=builder --chown=fastify:nodejs /app/backend/dist ./backend/dist
+COPY --chown=fastify:nodejs backend/src/db/migrations ./backend/src/db/migrations
+COPY --chown=fastify:nodejs backend/src/db/schema.ts ./backend/src/db/schema.ts
+COPY --chown=fastify:nodejs backend/src/env-loader.ts ./backend/src/env-loader.ts
+COPY --chown=fastify:nodejs backend/drizzle.config.ts ./backend/drizzle.config.ts
+
+USER fastify
+EXPOSE 8787
+
+CMD ["node", "backend/dist/server.js"]
