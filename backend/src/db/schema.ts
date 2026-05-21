@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { bigint, check, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { bigint, check, index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 // Phase 1：Google OAuth 接入后真实使用
 // password_hash 改 nullable —— OAuth 用户没密码；email 仍唯一；google_sub 是 Google 用户稳定标识
@@ -59,5 +59,38 @@ export const conversations = pgTable(
     // 路由层 normalizer 已经强制 mode ∈ {'single','catalog'},
     // DB 层再加 CHECK 做纵深防御:迁移脚本 / 控制台直写 / 未来的批量导入都被拦下。
     check('conversations_mode_check', sql`${table.mode} IN ('single', 'catalog')`),
+  ],
+)
+
+// 用户配置的 HTTP(S) 代理池。task-runtime 经 safeFetchWithRetry 通过 ProxyAgent 走它。
+// status / latency_ms / last_checked_at / consecutive_failures 由 proxy-runtime
+// worker 60s TCP 探活刷写;status 转换才落盘,中间只更新内存(详见 proxy-runtime.ts)。
+//
+// 密码字段明文:后端在 docker 内网,PG 不直接对外。若未来有备份外流诉求再上加密。
+export const proxies = pgTable(
+  'proxies',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    scheme: text('scheme').notNull(), // 'http' | 'https'
+    host: text('host').notNull(),
+    port: integer('port').notNull(),
+    username: text('username'),
+    password: text('password'),
+    label: text('label'),
+    countryCode: text('country_code'),
+    status: text('status').notNull().default('unknown'), // 'online' | 'offline' | 'unknown'
+    latencyMs: integer('latency_ms'),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('proxies_user_created_idx').on(table.userId, table.createdAt),
+    check('proxies_scheme_check', sql`${table.scheme} IN ('http', 'https')`),
+    check('proxies_status_check', sql`${table.status} IN ('online', 'offline', 'unknown')`),
+    check('proxies_port_check', sql`${table.port} BETWEEN 1 AND 65535`),
   ],
 )

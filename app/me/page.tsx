@@ -3,10 +3,17 @@
 import Image from 'next/image'
 import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useMemo, useState } from 'react'
-import { LogOut } from 'lucide-react'
+import { LogOut, RefreshCw, Trash2 } from 'lucide-react'
 import { CatalogLimitPicker } from '@/components/ui/CatalogLimitPicker'
 import { PlatformPicker } from '@/components/ui/PlatformPicker'
 import { useConversations } from '@/hooks/useConversations'
+import {
+  useCreateProxy,
+  useDeleteProxy,
+  useProxies,
+  useRefreshProxies,
+  useTestProxy,
+} from '@/hooks/useProxies'
 import { useTasks } from '@/hooks/useTasks'
 import {
   DEFAULT_CATALOG_LIMIT,
@@ -14,14 +21,15 @@ import {
   reconcilePlatform,
 } from '@/lib/mock/platforms'
 import { getPreferences, savePreferences } from '@/lib/preferences'
-import type { CollectMode, UserPreferences } from '@/lib/types'
+import type { CollectMode, NewProxyForm, ProxyRecord, ProxyScheme, UserPreferences } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-type Tab = 'account' | 'preferences' | 'usage'
+type Tab = 'account' | 'preferences' | 'proxies' | 'usage'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'account', label: '账户' },
   { key: 'preferences', label: '默认偏好' },
+  { key: 'proxies', label: '代理池' },
   { key: 'usage', label: '使用统计' },
 ]
 
@@ -87,6 +95,7 @@ export default function MePage() {
 
       {tab === 'account' && <AccountTab />}
       {tab === 'preferences' && <PreferencesTab />}
+      {tab === 'proxies' && <ProxiesTab />}
       {tab === 'usage' && <UsageTab />}
     </div>
   )
@@ -184,6 +193,289 @@ function PreferencesTab() {
 
 /* ====================== 字段模板 ====================== */
 // 字段模板功能已下线（前端不再选择启用字段，后端总是输出全集）。
+
+/* ====================== 代理池 ====================== */
+const MAX_PROXIES_PER_USER = 10
+
+function ProxiesTab() {
+  const proxiesQuery = useProxies()
+  const proxies = useMemo(() => proxiesQuery.data ?? [], [proxiesQuery.data])
+
+  const createMutation = useCreateProxy()
+  const deleteMutation = useDeleteProxy()
+  const refreshMutation = useRefreshProxies()
+  const testMutation = useTestProxy()
+
+  // 表单本地状态
+  const [scheme, setScheme] = useState<ProxyScheme>('http')
+  const [host, setHost] = useState('')
+  const [port, setPort] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [label, setLabel] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const atLimit = proxies.length >= MAX_PROXIES_PER_USER
+
+  function resetForm() {
+    setHost('')
+    setPort('')
+    setUsername('')
+    setPassword('')
+    setLabel('')
+    setFormError(null)
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    setFormError(null)
+
+    const trimmedHost = host.trim()
+    const portNum = Number.parseInt(port, 10)
+    if (!trimmedHost) {
+      setFormError('请填写代理地址')
+      return
+    }
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      setFormError('端口必须是 1-65535 的整数')
+      return
+    }
+
+    const form: NewProxyForm = {
+      scheme,
+      host: trimmedHost,
+      port: portNum,
+      username: username.trim() || null,
+      password: password || null,
+      label: label.trim() || null,
+      countryCode: null,
+    }
+
+    try {
+      await createMutation.mutateAsync(form)
+      resetForm()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : '新增失败')
+    }
+  }
+
+  async function handleDelete(proxy: ProxyRecord) {
+    if (!window.confirm(`确认删除代理 ${proxy.host}:${proxy.port}?`)) return
+    try {
+      await deleteMutation.mutateAsync(proxy.id)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '删除失败')
+    }
+  }
+
+  async function handleTest(proxy: ProxyRecord) {
+    try {
+      await testMutation.mutateAsync(proxy.id)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '测试失败')
+    }
+  }
+
+  async function handleRefresh() {
+    try {
+      await refreshMutation.mutateAsync()
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '刷新失败')
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Section
+        title="代理池"
+        desc="采集任务会自动通过你配置的 HTTP(S) 代理访问目标站点。后端每 60 秒探活一次,延迟最低的在线代理会被优先选用。"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-[14px] text-ink-subtle">
+            已配置 {proxies.length} / {MAX_PROXIES_PER_USER}
+          </span>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshMutation.isPending || proxies.length === 0}
+            className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-line px-3 text-[13.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={refreshMutation.isPending ? 'animate-spin' : ''} />
+            刷新探活
+          </button>
+        </div>
+
+        {proxiesQuery.isLoading ? (
+          <div className="rounded-md border border-line bg-surface px-4 py-6 text-center text-[14px] text-ink-subtle">
+            正在加载…
+          </div>
+        ) : proxiesQuery.error ? (
+          <div className="rounded-md border border-line bg-surface px-4 py-6 text-center text-[14px] text-danger">
+            {proxiesQuery.error instanceof Error ? proxiesQuery.error.message : '加载失败'}
+          </div>
+        ) : proxies.length === 0 ? (
+          <div className="rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-[14px] text-ink-subtle">
+            还没有配置代理。在下方新增一个,采集任务会自动使用。
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {proxies.map((proxy) => (
+              <li
+                key={proxy.id}
+                className="flex flex-col gap-2 rounded-md border border-line bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <ProxyStatusBadge status={proxy.status} />
+                    <span className="truncate font-mono text-[14px] text-ink">
+                      {proxy.scheme}://{proxy.host}:{proxy.port}
+                    </span>
+                    {proxy.hasPassword ? (
+                      <span className="rounded-pill bg-ink/5 px-1.5 py-0.5 text-[11px] text-ink-subtle">
+                        已认证
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-subtle">
+                    {proxy.label ? <span>{proxy.label}</span> : null}
+                    {proxy.latencyMs !== null ? <span>{proxy.latencyMs} ms</span> : null}
+                    {proxy.consecutiveFailures > 0 ? (
+                      <span className="text-warning">连续失败 {proxy.consecutiveFailures} 次</span>
+                    ) : null}
+                    {proxy.lastCheckedAt ? (
+                      <span>最近探活 {formatRelative(proxy.lastCheckedAt)}</span>
+                    ) : (
+                      <span>未探活</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleTest(proxy)}
+                    disabled={testMutation.isPending}
+                    className="inline-flex h-7 items-center gap-1 rounded-pill border border-line px-2.5 text-[12.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    测试
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(proxy)}
+                    disabled={deleteMutation.isPending}
+                    className="inline-flex h-7 items-center justify-center rounded-pill border border-line px-2 text-ink-muted transition-colors hover:border-danger/60 hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="删除"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="新增代理" desc="只支持 HTTP / HTTPS 代理;SOCKS 暂不支持。">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <select
+              value={scheme}
+              onChange={(e) => setScheme(e.target.value as ProxyScheme)}
+              disabled={atLimit}
+              className="h-9 rounded-md border border-line bg-surface px-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ink"
+            >
+              <option value="http">http</option>
+              <option value="https">https</option>
+            </select>
+            <input
+              type="text"
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              placeholder="代理地址(IP 或域名)"
+              disabled={atLimit}
+              className="h-9 flex-1 rounded-md border border-line bg-surface px-3 text-[14px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-ink"
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              value={port}
+              onChange={(e) => setPort(e.target.value)}
+              placeholder="端口"
+              disabled={atLimit}
+              className="h-9 w-full rounded-md border border-line bg-surface px-3 text-[14px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-ink sm:w-[100px]"
+            />
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="用户名(可选)"
+              autoComplete="off"
+              disabled={atLimit}
+              className="h-9 flex-1 rounded-md border border-line bg-surface px-3 text-[14px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-ink"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="密码(可选)"
+              autoComplete="new-password"
+              disabled={atLimit}
+              className="h-9 flex-1 rounded-md border border-line bg-surface px-3 text-[14px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-ink"
+            />
+          </div>
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="备注(可选,如 HK-1)"
+            disabled={atLimit}
+            className="h-9 rounded-md border border-line bg-surface px-3 text-[14px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-ink"
+          />
+
+          {formError ? <p className="text-[13px] text-danger">{formError}</p> : null}
+          {atLimit ? (
+            <p className="text-[13px] text-ink-subtle">已达每用户 {MAX_PROXIES_PER_USER} 个上限。</p>
+          ) : null}
+
+          <div>
+            <button
+              type="submit"
+              disabled={createMutation.isPending || atLimit}
+              className="inline-flex h-9 items-center rounded-pill bg-ink px-5 text-[15px] font-medium text-accent-fg transition-colors hover:bg-[#1f1f1f] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {createMutation.isPending ? '添加中…' : '添加代理'}
+            </button>
+          </div>
+        </form>
+      </Section>
+    </div>
+  )
+}
+
+function ProxyStatusBadge({ status }: { status: ProxyRecord['status'] }) {
+  const cfg = {
+    online: { dot: 'bg-success', label: '在线', text: 'text-success' },
+    offline: { dot: 'bg-danger', label: '离线', text: 'text-danger' },
+    unknown: { dot: 'bg-ink/30', label: '未知', text: 'text-ink-subtle' },
+  }[status]
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 text-[12.5px]', cfg.text)}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', cfg.dot)} />
+      {cfg.label}
+    </span>
+  )
+}
+
+function formatRelative(iso: string): string {
+  const then = Date.parse(iso)
+  if (!Number.isFinite(then)) return '—'
+  const deltaSec = Math.max(0, Math.floor((Date.now() - then) / 1000))
+  if (deltaSec < 60) return `${deltaSec} 秒前`
+  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)} 分钟前`
+  if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)} 小时前`
+  return `${Math.floor(deltaSec / 86400)} 天前`
+}
 
 /* ====================== 使用统计 ====================== */
 function UsageTab() {

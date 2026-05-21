@@ -57,6 +57,15 @@ services:
     image: scrapify-backend
     container_name: scrapify-backend
     restart: unless-stopped
+    # Playwright/Chromium 相关:
+    #   init=true 用 tini 作 PID 1,reap Chromium 子进程 zombie
+    #   stop_grace_period 默认 10s 不够 Chromium 干净关闭,给到 30s
+    #   mem_limit 单 Chromium ~250MB + browser ~150MB + Node ~200MB + 缓冲
+    #   shm_size 默认 64MB 会让 Chromium 崩,给到 1GB
+    init: true
+    stop_grace_period: 30s
+    mem_limit: 1500m
+    shm_size: 1gb
     environment:
       PORT: "8787"
       HOST: "0.0.0.0"

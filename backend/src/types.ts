@@ -62,7 +62,40 @@ export interface NewConversationForm {
   taskIds: string[]
 }
 
+// 用户配置的 HTTP(S) 代理。后端在 docker 内网,PG 不对外,密码字段直接明文存。
+// status 由 proxy-runtime worker 周期性 TCP 探活回写。
+export type ProxyScheme = 'http' | 'https'
+export type ProxyStatus = 'online' | 'offline' | 'unknown'
+
+export interface ProxyRecord {
+  id: string
+  userId: string
+  scheme: ProxyScheme
+  host: string
+  port: number
+  username: string | null
+  password: string | null
+  label: string | null
+  countryCode: string | null
+  status: ProxyStatus
+  latencyMs: number | null
+  lastCheckedAt: string | null
+  consecutiveFailures: number
+  createdAt: string
+}
+
+export interface NewProxyForm {
+  scheme: ProxyScheme
+  host: string
+  port: number
+  username?: string | null
+  password?: string | null
+  label?: string | null
+  countryCode?: string | null
+}
+
 export interface DatabaseShape {
   tasks: TaskRuntimeRecord[]
   conversations: ConversationRecord[]
+  proxies: ProxyRecord[]
 }

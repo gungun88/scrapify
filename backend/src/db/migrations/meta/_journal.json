@@ -43,6 +43,13 @@
       "when": 1778636831100,
       "tag": "0005_nebulous_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778697963181,
+      "tag": "0006_wild_slayback",
+      "breakpoints": true
     }
   ]
 }

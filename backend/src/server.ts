@@ -7,9 +7,13 @@ import { closeDbConnections, getRedis, initDb } from './db/client'
 import { requireUser } from './middleware/require-user'
 import { registerConversationRoutes } from './routes/conversations'
 import { registerHealthRoutes } from './routes/health'
+import { registerProxyRoutes } from './routes/proxies'
 import { registerTaskRoutes } from './routes/tasks'
 import { registerUserRoutes } from './routes/users'
+import { closeBrowserPool } from './services/browser-pool'
 import { loadDatabase } from './services/data-store'
+import { closeAllProxyAgents } from './services/proxy-pool'
+import { startProxyWorker, stopProxyWorker } from './services/proxy-runtime'
 import { startTaskWorker } from './services/task-runtime'
 
 async function createServer() {
@@ -75,6 +79,7 @@ async function createServer() {
   await registerUserRoutes(app)
   await registerTaskRoutes(app)
   await registerConversationRoutes(app)
+  await registerProxyRoutes(app)
 
   return app
 }
@@ -84,6 +89,7 @@ async function start() {
   await initDb()
   await loadDatabase()
   startTaskWorker()
+  startProxyWorker()
   const app = await createServer()
 
   // 优雅关闭：让 PGlite 释放 postmaster.pid 锁，避免下次启动崩溃
@@ -92,6 +98,19 @@ async function start() {
     if (shuttingDown) return
     shuttingDown = true
     app.log.info({ signal }, 'shutting down gracefully')
+    stopProxyWorker()
+    try {
+      await closeAllProxyAgents()
+    } catch (error) {
+      app.log.error({ err: error }, 'error closing proxy agents')
+    }
+    // 关闭浏览器池(Playwright):必须在 app.close 之前,
+    // 否则 Chromium 子进程会变 zombie(docker init=true 会兜底但不可依赖)
+    try {
+      await closeBrowserPool()
+    } catch (error) {
+      app.log.error({ err: error }, 'error closing browser pool')
+    }
     try {
       await app.close()
     } catch (error) {

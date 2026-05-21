@@ -1,6 +1,11 @@
 import dns from 'node:dns/promises'
 import type { LookupAddress } from 'node:dns'
 import net from 'node:net'
+import {
+  fetch as undiciFetch,
+  type RequestInit as UndiciRequestInit,
+  type Response as UndiciResponse,
+} from 'undici'
 
 // SSRF 防护:用户提交的 URL 不能让后端 fetch 到内网。
 // 思路是"DNS 二次解析 + 私有/保留段拒绝"。
@@ -161,7 +166,7 @@ export async function assertPublicHostname(hostname: string): Promise<void> {
   }
 }
 
-export interface SafeFetchInit extends Omit<RequestInit, 'redirect'> {
+export interface SafeFetchInit extends Omit<UndiciRequestInit, 'redirect'> {
   // safeFetch 内部统一用 manual redirect,这里不允许传入
   maxRedirects?: number
 }
@@ -171,10 +176,16 @@ const DEFAULT_MAX_REDIRECTS = 3
 // 安全 fetch:每次发起前都重新校验 hostname。
 // fetch 默认 follow redirect 不重做 DNS 校验,所以要 manual 处理重定向,
 // 每跳都拿到新 URL → assertPublicHostname → 再 fetch。
+//
+// 用 undici.fetch 而不是 Node 全局 fetch:全局 fetch 的 RequestInit 类型没有
+// `dispatcher` 字段(WHATWG 规范不要求),需要 cast 才能传代理。undici.fetch
+// 的 RequestInit 自带 dispatcher,类型干净。运行时行为与 Node 内置一致(Node
+// 内置也是 undici)。返回的 Response 也是 undici Response,业务侧用到的
+// .ok/.status/.headers/.json()/.text()/.arrayBuffer() 接口一致。
 export async function safeFetch(
   url: string | URL,
   init: SafeFetchInit = {},
-): Promise<Response> {
+): Promise<UndiciResponse> {
   const { maxRedirects = DEFAULT_MAX_REDIRECTS, ...fetchInit } = init
   let currentUrl = typeof url === 'string' ? url : url.toString()
 
@@ -188,7 +199,7 @@ export async function safeFetch(
 
     await assertPublicHostname(parsed.hostname)
 
-    const response = await fetch(currentUrl, {
+    const response = await undiciFetch(currentUrl, {
       ...fetchInit,
       redirect: 'manual',
     })

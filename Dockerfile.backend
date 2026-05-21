@@ -1,15 +1,18 @@
 # syntax=docker/dockerfile:1.7
 # ============================================================
-# Scrapify · 后端镜像（Fastify + Drizzle + tsc）
+# Scrapify · 后端镜像（Fastify + Drizzle + tsc + Playwright/Chromium）
 # 多阶段构建：deps → builder → runner
+# 2026-05 之后 base 从 alpine 改为 bookworm-slim:
+#   Playwright 官方 Chromium 二进制 link glibc，alpine 的 musl 跑不动。
+# 镜像 size 因此从 ~120MB 涨到 ~600MB（chromium ~280MB + 依赖 ~180MB）。
 # ============================================================
 
-ARG NODE_VERSION=20-alpine
+ARG NODE_VERSION=20-bookworm-slim
 
 # ---------- deps：装全套依赖（drizzle-kit 在迁移时仍要用，留在镜像里） ----------
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 RUN npm ci --no-audit --no-fund
 
@@ -21,19 +24,28 @@ COPY package.json tsconfig.json ./
 COPY backend ./backend
 RUN npm run backend:build
 
-# ---------- runner：最小运行时 ----------
+# ---------- runner：最小运行时 + Chromium ----------
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8787
 ENV HOST=0.0.0.0
+# Playwright 浏览器路径写死，方便 ENV/--chown 操作
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# 非 root 运行
-RUN addgroup -g 1001 -S nodejs && adduser -S fastify -u 1001 -G nodejs
+# 非 root 运行（bookworm 用 useradd/groupadd 而非 alpine 的 addgroup/adduser）
+RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs -s /bin/sh -m fastify
 
-# 必要的 node_modules（drizzle-kit 留着以便 `db:migrate` 子命令）
+# 必要的 node_modules（drizzle-kit 留着以便 `db:migrate` 子命令；rebrowser-playwright 需在此供 `playwright install` 使用）
 COPY --from=deps --chown=fastify:nodejs /app/node_modules ./node_modules
 COPY --chown=fastify:nodejs package.json ./
+
+# 装 Chromium 二进制 + 系统库（libnss3 / libatk1.0 / libdrm2 / libgbm1 等）。
+# --with-deps 会自动 apt-get install，避免手写依赖清单未来失同步。
+# 必须以 root 跑（apt-get 需要 root），完成后把 /ms-playwright 交给 fastify 用户。
+RUN npx playwright install --with-deps chromium && \
+    chown -R fastify:nodejs /ms-playwright && \
+    rm -rf /var/lib/apt/lists/*
 
 # 后端源码：dist 用于 server.js；src + drizzle.config.ts 用于 drizzle-kit migrate
 # (drizzle.config.ts import 了 src/env-loader.ts，drizzle-kit 通过 esbuild 实时编译 TS)

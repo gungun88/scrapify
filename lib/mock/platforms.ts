@@ -158,7 +158,6 @@ export const CATALOG_PLATFORM_GROUPS: PlatformGroup[] = [
 const UNSUPPORTED_PLATFORM_IDS = new Set([
   '1688',
   'amazon',
-  'aliexpress',
   'alibaba',
   'walmart',
   'wayfair',
@@ -166,7 +165,6 @@ const UNSUPPORTED_PLATFORM_IDS = new Set([
   'lazada',
   'ebay',
   'costco',
-  'etsy',
   'taobao',
   'temu',
 ])

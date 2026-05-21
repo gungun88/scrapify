@@ -59,6 +59,91 @@
 
 ## 2. 开发记录
 
+## 2026-05-14 第 28 次整理:Phase 3 落地(fetch 重试 + 用户级代理池)
+
+> Launch Spec Phase 3 原计划"采集走代理池 + 限流 + 重试 + BullMQ",但其中:
+> - 精细限流第 27 次整理已经做了(分级 + per-user bucket)
+> - BullMQ 性价比低(in-process worker 第 27 次整理后稳定)
+> - "用户代理池"的载体(proxy 表 + UI + worker)第 21 次整理整体下线了,要做就得整体加回
+>
+> 跟用户对齐后本期范围:**fetch 层指数退避重试**(独立 Phase 3a)+ **完整代理池重建**(Phase 3b),不动 BullMQ。
+>
+> 计划文件:`C:\Users\Administrator\.claude\plans\moonlit-puzzling-horizon.md`
+
+### Phase 3a:fetch 层指数退避重试
+
+- ~~新建 `backend/src/services/safe-http.ts`:`safeFetchWithRetry(url, init, opts, ctx)` 包装 `safeFetch`~~
+  - 重试触发:fetch 抛错(网络/DNS/per-attempt 超时)或响应 ∈ `[500,502,503,504]`
+  - 不重试:2xx / 3xx / 4xx(含 429,尊重对方限流)/ `SsrfBlockedError` / 外部 signal 主动 abort
+  - 退避:`min(baseDelay * 2^(attempt-1) + random(0,500), maxDelay)`,attempt=1 失败等 1-1.5s,attempt=2 等 2-2.5s
+  - Abort 状态机:per-attempt `AbortController` + 外部 `signal` 接力,catch AbortError 后查 `signal.aborted` 区分"用户取消"和"内部超时"
+  - 抽出 `FetchRetryExhaustedError`,带 `attempts/lastStatus/lastErrorMessage` 方便上层日志识别
+- ~~`backend/src/services/task-runtime.ts` 4 处 fetch 改用 `safeFetchWithRetry`~~:`fetchProductsPage`(Shopify)、`fetchHtmlPage`(HTML 通用)、`fetchWooCommercePage`、`fetchSitemapXml`。timeout/AbortController 不再各自手写,统一走 wrapper 内层
+
+### Phase 3b:用户级代理池模块
+
+- ~~`npm install undici@^6`~~ 显式装,Node 内置 undici 不暴露 `import { ProxyAgent } from 'undici'` 路径
+- ~~`backend/src/services/url-guard.ts` 切到 `undici.fetch`~~:全局 fetch 的 `RequestInit` 类型不带 `dispatcher`,会要求 cast;`undici` 自带类型 `RequestInit` + `Response`,改用后类型干净,业务侧 `response.status/ok/json/text/arrayBuffer` 接口一致
+- ~~Drizzle schema 加 `proxies` 表 + `0006_wild_slayback.sql` 迁移~~:`id / user_id / scheme / host / port / username / password / label / country_code / status / latency_ms / last_checked_at / consecutive_failures / created_at`,带 scheme/status/port CHECK 约束 + `(user_id, created_at)` 索引
+- ~~`backend/src/types.ts` 扩 `ProxyRecord` / `ProxyScheme` / `ProxyStatus` / `NewProxyForm`;`DatabaseShape` 加 `proxies`~~
+- ~~`backend/src/services/data-store.ts` 集成 proxies~~:`markProxyDirty/Deleted` 加入差异集合体系,`fetchStateFromPg` 并发拉第三张表,`performSave` 加 proxies upsert/delete 分支,失败回滚 dirty/deleted 同步处理
+- ~~`backend/src/services/proxy-pool.ts` 新建~~:
+  - `pickProxyForUser(userId)`:过滤 `status=online && consecutive_failures<3`,按 `latency_ms` 升序挑 1 个
+  - `getProxyAgent(proxy)`:`Map<proxyId, {agent, signature}>` 按内容签名缓存 ProxyAgent,内容变了 `agent.close()` 再建,避免每个 fetch new 一个造成连接池 churn
+  - `invalidateProxyAgent(id)`:CRUD 时主动释放
+  - `closeAllProxyAgents()`:graceful shutdown 用
+  - `isProxyConnectionError(error)`:命中 `ECONNREFUSED / ECONNRESET / ETIMEDOUT / ENOTFOUND / EHOSTUNREACH / ENETUNREACH / UND_ERR_SOCKET / UND_ERR_CONNECT_TIMEOUT` 才认为"代理本身坏了"
+  - `recordProxyFailure / recordProxySuccess`:阈值 5 次失败标 `status=offline` + 释放 agent
+- ~~`backend/src/services/proxy-runtime.ts` 新建~~:
+  - `startProxyWorker()`:`setInterval` 60s 一次,并发 5 路 `net.connect` 5s 超时
+  - dirty 优化:status 转换才 `markProxyDirty`;`latency_ms/last_checked_at` 每 5 轮 flush 一次(避免稳态 IO 浪费)
+  - `triggerProxyRefresh(userId)` / `testProxyById(id)`:路由层手动触发
+- ~~`safe-http.ts` 扩展 `HttpContext = { userId? }`~~:
+  - 调用方传 userId → 调 `pickProxyForUser` → `getProxyAgent` → fetch.dispatcher 注入
+  - 粘性代理:整次 wrapper 调用复用同一个代理(分页跨代理无意义)
+  - 没有可用代理 → fallback 直连 + WARN 日志 `proxy_pool_empty_fallback_to_direct`(未来按需加 `STRICT_PROXY_MODE` env)
+  - 连接级错误才 `recordProxyFailure`;任何 HTTP 响应一律视为代理透传成功(区分"代理自身 502"和"上游 502 透传"需要解析 Via header,不值)
+- ~~`task-runtime.ts` 4 个 fetch helper + `discoverSitemapProductUrls` 加 `ctx` 参数,4 个 collector 调用点透传 `{ userId: record.userId }`~~
+- ~~`backend/src/routes/proxies.ts` 新建~~:5 个 endpoint
+  - `GET /api/proxies` 列表,响应剔除 `password` 改回 `hasPassword`
+  - `POST /api/proxies` 新增,20/min/user,SSRF 校验 host(私有 IP 拒绝),硬上限每用户 10 个,创建后立即 fire-and-forget 探活
+  - `DELETE /api/proxies/:id` 30/min/user,删除 + invalidate agent
+  - `POST /api/proxies/refresh` 10/min/user,触发该用户全量探活
+  - `POST /api/proxies/:id/test` 30/min/user,单代理手动测试
+- ~~`server.ts` 注册路由 + `startProxyWorker` + graceful shutdown 加 `stopProxyWorker` / `closeAllProxyAgents`~~
+
+### 前端
+
+- ~~`lib/types/index.ts` 加 `ProxyRecord` / `ProxyScheme` / `ProxyStatus` / `NewProxyForm`(`hasPassword: boolean` 替代密码回显)~~
+- ~~`app/api/proxies/*` 4 个代理路由(GET+POST / DELETE / refresh POST / [id]/test POST),全部走 `proxyAuthenticated`~~
+- ~~`hooks/useProxies.ts` 新建~~:`useProxies`(30s polling)、`useCreateProxy`、`useDeleteProxy`、`useRefreshProxies`、`useTestProxy`;mutation 后乐观更新 query cache
+- ~~`app/me/page.tsx` 加"代理池" tab + ProxiesTab 组件~~:列表(状态徽章 + 延迟 + 连续失败 + 最后探活 + 删除/测试按钮)+ 新增表单(scheme select / host / port / 可选用户名密码 / 备注)+ 顶部刷新探活按钮 + 上限/错误展示
+
+### 设计决策(动手前的复盘)
+
+- **不复用第 21 次整理删除的旧 proxy 模块**:产品形态已经从"6 页 SaaS 控制台"变成对话式采集器,UI 重做更直接;数据模型也精简了(去掉了 traffic_summary / 国旗代码 / 探活历史曲线这些纯展示字段)
+- **HMAC 校验 + SSRF 黑名单复用旧栈**:第 27 次整理的 url-guard + auth-proxy 已经完全够用,本期没改动任何 HTTP 层安全代码
+- **不上加密 / vault 存代理密码**:后端 docker 内网 + PG 不对外,本期价值不大;`.env.production.example` 文档已注明
+- **代理 host 必须公网**:防止用户拿代理当 SSRF 跳板让后端打内网;未来如有内网代理诉求加 `ALLOWED_PRIVATE_PROXY_HOSTS` env
+- **代理粘性 + 仅连接级错误才计失败**:Plan agent 强调避免"上游 502 透传被误判为代理故障"
+- **dirty-set 优化**:probe-only worker 不学 task-runtime 的"per-mutation markDirty";status 转换才落盘,稳态 100 代理 × 60s 探活的 IO ≈ 0
+
+### 验证
+
+- ~~`npm run db:generate` 通过,生成 `0006_wild_slayback.sql`(仅 CREATE TABLE + FK + index + 3 个 CHECK,无破坏现有 schema)~~
+- ~~`npm run backend:check` 通过~~
+- ~~`npm run lint` 通过(0 warning)~~
+- ~~`npm run build` 通过~~:路由表多了 4 个 `/api/proxies/*`;/me 页 size 6.69kB 仍合理
+- 未完成事项:本机无可用 HTTP 代理实例,未做真实端到端冒烟(新增代理→探活→online→提交任务→抓包/代理日志确认流量走代理);用户在自己有代理的环境跑前 5 步即可(见计划文件验证段)
+
+### 已知遗留 / 下一步
+
+- 代理只支持 HTTP/HTTPS,SOCKS5 未做(很多商用代理服务只给 SOCKS,后续按需补)
+- 没加 `STRICT_PROXY_MODE`:"配了代理但全失败时拒绝直连"暂未做,目前 fallback + WARN
+- 旧 PGlite 数据目录里 4 张废弃表残留行:跑 `npm run db:migrate` 应用 `0001/0006` 即可
+- HMAC 仍未加 body hash,本期不动
+
+
 ## 2026-05-13 第 27 次整理：多用户上线加固（安全 + 并发瓶颈消除）
 
 > 目标:让代码库可以安全地对公网开放、支撑多用户并发使用。
@@ -727,6 +812,9 @@
 - Phase 1：鉴权 / 多租户（users / sessions / email_verifications / password_resets + JWT + 邮件 + middleware）
 - Phase 2：额度系统（quota_plans / usage_counters + 创建前 checkQuota）—— 前期没人付费，**已暂缓**
 - Phase 3：采集走代理池 + 失败重试（BullMQ）+ 写接口/登录精细限流
+  - ~~限流(分级 + per-user)第 27 次整理落地~~
+  - ~~fetch 层指数退避重试 + 用户级代理池(无 BullMQ)第 28 次整理落地~~
+  - 未完成:SOCKS5 代理支持 / STRICT_PROXY_MODE / BullMQ 任务级重试队列(性价比评估后不做)
 - ~~Phase 4：Dockerfile + docker-compose.prod + Caddy + deploy/README~~（第 26 次整理已落地，未完成事项见该节"未完成"标记）
 - Phase 4：Dockerfile + docker-compose.prod + Caddy + deploy/README
 - Phase 5：pino 日志 + Sentry + Turnstile + 安全头 + CSRF

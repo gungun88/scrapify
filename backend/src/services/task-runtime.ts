@@ -10,11 +10,26 @@ import type {
 import { getDatabase, markTaskDirty, saveDatabase } from './data-store'
 import { formatAttemptedCollectors, getCollectorOrder, type CollectorKey } from './platform-registry'
 import { extractNextDataPayload } from './runtime-utils'
-import { safeFetch, SsrfBlockedError, assertPublicHostname } from './url-guard'
+import { safeFetchWithRetry, type HttpContext } from './safe-http'
+import { SsrfBlockedError, assertPublicHostname } from './url-guard'
+import { tryEtsyCollector } from './collectors/etsy'
+import { tryAliexpressCollector } from './collectors/aliexpress'
 
 const TASK_TICK_MS = 3000
 const TASK_QUEUE_DELAY_MS = 1500
-const MAX_ACTIVE_TASKS = 2
+// 并发分类:浏览器型 collector 单 Chromium 占内存 ~250MB,严格 1 并发;
+// HTTP 型 collector 轻量,可 2 并发(向后兼容原 MAX_ACTIVE_TASKS=2 设置)。
+const MAX_ACTIVE_HTTP_TASKS = 2
+const MAX_ACTIVE_BROWSER_TASKS = 1
+// 哪些 collector 是浏览器型(目前只有 aliexpress)。
+// 注:如果未来某平台支持"HTTP collector + Playwright collector 双备份",
+// 用 task.platform 单一来源不够,届时改用 collector key 决策。POC 阶段单一来源够用。
+const BROWSER_COLLECTOR_PLATFORMS = new Set<string>(['aliexpress'])
+
+function isBrowserTask(platform: string): boolean {
+  return BROWSER_COLLECTOR_PLATFORMS.has(platform)
+}
+
 const SHOPIFY_PAGE_LIMIT = 250
 const SHOPIFY_MAX_PAGES = 12
 const REQUEST_TIMEOUT_MS = 15_000
@@ -76,7 +91,7 @@ interface ShopifyProductsResponse {
   products?: ShopifyProduct[]
 }
 
-interface GenericCollectedProduct {
+export interface GenericCollectedProduct {
   id: string
   handle: string
   url: string
@@ -488,22 +503,23 @@ function mapProductToResult(product: ShopifyProduct, origin: string): TaskResult
   }
 }
 
-async function fetchProductsPage(origin: string, path: string, page: number) {
+async function fetchProductsPage(origin: string, path: string, page: number, ctx: HttpContext = {}) {
   const endpoint = new URL(path, origin)
   endpoint.searchParams.set('limit', String(SHOPIFY_PAGE_LIMIT))
   endpoint.searchParams.set('page', String(page))
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
   try {
-    const response = await safeFetch(endpoint, {
-      headers: {
-        accept: 'application/json',
-        'user-agent': 'Scrapify/0.1',
+    const response = await safeFetchWithRetry(
+      endpoint,
+      {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'Scrapify/0.1',
+        },
       },
-      signal: controller.signal,
-    })
+      { timeoutMs: REQUEST_TIMEOUT_MS },
+      ctx,
+    )
 
     if (response.status === 404) {
       return {
@@ -534,23 +550,22 @@ async function fetchProductsPage(origin: string, path: string, page: number) {
     }
 
     throw error
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
-async function fetchHtmlPage(url: string) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
+async function fetchHtmlPage(url: string, ctx: HttpContext = {}) {
   try {
-    const response = await safeFetch(url, {
-      headers: {
-        accept: 'text/html,application/xhtml+xml',
-        'user-agent': 'Scrapify/0.1',
+    const response = await safeFetchWithRetry(
+      url,
+      {
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'user-agent': 'Scrapify/0.1',
+        },
       },
-      signal: controller.signal,
-    })
+      { timeoutMs: REQUEST_TIMEOUT_MS },
+      ctx,
+    )
 
     if (!response.ok) {
       throw new Error(`Collector request failed with HTTP ${response.status}.`)
@@ -563,12 +578,10 @@ async function fetchHtmlPage(url: string) {
     }
 
     throw error
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
-function collectProductsFromJsonLd(html: string, origin: string) {
+export function collectProductsFromJsonLd(html: string, origin: string) {
   const items: GenericCollectedProduct[] = []
   const scripts = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
 
@@ -699,7 +712,7 @@ function collectFallbackHtmlProducts(html: string, parsedUrl: URL) {
   return exactMatches.length > 0 ? exactMatches : allItems
 }
 
-function mapGenericProductToResult(product: GenericCollectedProduct): TaskResultRow {
+export function mapGenericProductToResult(product: GenericCollectedProduct): TaskResultRow {
   return {
     id: product.id,
     handle: product.handle || null,
@@ -716,7 +729,7 @@ function mapGenericProductToResult(product: GenericCollectedProduct): TaskResult
   }
 }
 
-interface CollectorOutcome {
+export interface CollectorOutcome {
   items: TaskResultRow[]
   pageCount: number
   endpoint: string | null
@@ -806,22 +819,23 @@ function mapWooCommerceProduct(product: WooCommerceProduct, origin: string): Tas
   return mapGenericProductToResult(generic)
 }
 
-async function fetchWooCommercePage(origin: string, path: string, page: number) {
+async function fetchWooCommercePage(origin: string, path: string, page: number, ctx: HttpContext = {}) {
   const endpoint = new URL(path, origin)
   endpoint.searchParams.set('per_page', String(WOOCOMMERCE_PAGE_LIMIT))
   endpoint.searchParams.set('page', String(page))
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
   try {
-    const response = await safeFetch(endpoint, {
-      headers: {
-        accept: 'application/json',
-        'user-agent': 'Scrapify/0.1',
+    const response = await safeFetchWithRetry(
+      endpoint,
+      {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'Scrapify/0.1',
+        },
       },
-      signal: controller.signal,
-    })
+      { timeoutMs: REQUEST_TIMEOUT_MS },
+      ctx,
+    )
 
     if (response.status === 404) {
       return {
@@ -852,23 +866,22 @@ async function fetchWooCommercePage(origin: string, path: string, page: number) 
     }
 
     throw error
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
-async function fetchSitemapXml(url: string) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
+async function fetchSitemapXml(url: string, ctx: HttpContext = {}) {
   try {
-    const response = await safeFetch(url, {
-      headers: {
-        accept: 'application/xml,text/xml,application/gzip,application/x-gzip,*/*',
-        'user-agent': 'Scrapify/0.1',
+    const response = await safeFetchWithRetry(
+      url,
+      {
+        headers: {
+          accept: 'application/xml,text/xml,application/gzip,application/x-gzip,*/*',
+          'user-agent': 'Scrapify/0.1',
+        },
       },
-      signal: controller.signal,
-    })
+      { timeoutMs: REQUEST_TIMEOUT_MS },
+      ctx,
+    )
 
     if (!response.ok) {
       return null
@@ -905,8 +918,6 @@ async function fetchSitemapXml(url: string) {
     }
   } catch {
     return null
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
@@ -923,7 +934,7 @@ function parseSitemapLocations(xml: string) {
   return [...locations]
 }
 
-async function discoverSitemapProductUrls(parsedUrl: URL): Promise<string[]> {
+async function discoverSitemapProductUrls(parsedUrl: URL, ctx: HttpContext = {}): Promise<string[]> {
   const candidates = [
     '/sitemap_products_1.xml', // Shopify
     '/sitemap.xml',
@@ -945,7 +956,7 @@ async function discoverSitemapProductUrls(parsedUrl: URL): Promise<string[]> {
 
     visited.add(targetUrl)
 
-    const result = await fetchSitemapXml(targetUrl)
+    const result = await fetchSitemapXml(targetUrl, ctx)
     if (!result) {
       continue
     }
@@ -965,7 +976,7 @@ async function discoverSitemapProductUrls(parsedUrl: URL): Promise<string[]> {
 
         visited.add(child)
 
-        const childResult = await fetchSitemapXml(child)
+        const childResult = await fetchSitemapXml(child, ctx)
         if (!childResult) {
           continue
         }
@@ -1000,7 +1011,7 @@ async function discoverSitemapProductUrls(parsedUrl: URL): Promise<string[]> {
 
 // 把每页抓取后的"更新进度 + 心跳 + 落库"封成一个 helper，
 // 三个 collector 复用，避免上一版那种 6-8 行内联代码重复 3 次。
-async function reportCollectorProgress(
+export async function reportCollectorProgress(
   record: TaskRuntimeRecord,
   items: TaskResultRow[],
   progress: number,
@@ -1039,7 +1050,7 @@ async function tryShopifyCollector(
       let response: Awaited<ReturnType<typeof fetchProductsPage>>
 
       try {
-        response = await fetchProductsPage(parsedUrl.origin, path, page)
+        response = await fetchProductsPage(parsedUrl.origin, path, page, { userId: record.userId })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Collector request failed.'
         console.warn(`[task ${record.id}] shopify endpoint failed: ${path} (${message})`)
@@ -1121,7 +1132,7 @@ async function tryWooCommerceCollector(
       let response: Awaited<ReturnType<typeof fetchWooCommercePage>>
 
       try {
-        response = await fetchWooCommercePage(parsedUrl.origin, path, page)
+        response = await fetchWooCommercePage(parsedUrl.origin, path, page, { userId: record.userId })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'WooCommerce request failed.'
         console.warn(`[task ${record.id}] woocommerce endpoint failed: ${path} (${message})`)
@@ -1188,7 +1199,7 @@ async function trySitemapCollector(
 
   let productUrls: string[] = []
   try {
-    productUrls = await discoverSitemapProductUrls(parsedUrl)
+    productUrls = await discoverSitemapProductUrls(parsedUrl, { userId: record.userId })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sitemap discovery failed.'
     console.warn(`[task ${record.id}] sitemap discovery failed: ${message}`)
@@ -1216,7 +1227,7 @@ async function trySitemapCollector(
     let html = ''
 
     try {
-      html = await fetchHtmlPage(productUrl)
+      html = await fetchHtmlPage(productUrl, { userId: record.userId })
       lastEndpoint = productUrl
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sitemap product fetch failed.'
@@ -1269,7 +1280,7 @@ async function tryHtmlFallbackCollector(
 
   let html = ''
   try {
-    html = await fetchHtmlPage(parsedUrl.toString())
+    html = await fetchHtmlPage(parsedUrl.toString(), { userId: record.userId })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'HTML fallback fetch failed.'
     console.warn(`[task ${record.id}] html fallback fetch failed: ${message}`)
@@ -1325,6 +1336,8 @@ async function executeTask(taskId: string) {
       woocommerce: tryWooCommerceCollector,
       sitemap: trySitemapCollector,
       html: tryHtmlFallbackCollector,
+      etsy: tryEtsyCollector,
+      aliexpress: tryAliexpressCollector,
     }
 
     const order = getCollectorOrder(record.platform)
@@ -1399,11 +1412,18 @@ async function tickTaskWorker() {
       }
     }
 
-    for (const task of db.tasks) {
-      if (activeExecutions.size >= MAX_ACTIVE_TASKS) {
-        break
-      }
+    // 按 collector 类型分桶计数当前活跃任务,以便分类限流。
+    // 浏览器型(MAX_ACTIVE_BROWSER_TASKS=1) vs HTTP 型(MAX_ACTIVE_HTTP_TASKS=2)。
+    let httpActive = 0
+    let browserActive = 0
+    for (const id of activeExecutions.keys()) {
+      const t = db.tasks.find((x) => x.id === id)
+      if (!t) continue
+      if (isBrowserTask(t.platform)) browserActive += 1
+      else httpActive += 1
+    }
 
+    for (const task of db.tasks) {
       if (task.status !== 'pending' || activeExecutions.has(task.id)) {
         continue
       }
@@ -1414,9 +1434,19 @@ async function tickTaskWorker() {
         continue
       }
 
+      // 分类限流:某类已满时跳过此 task,继续看下一个(可能另一类还有名额)
+      const isBrowser = isBrowserTask(task.platform)
+      if (isBrowser) {
+        if (browserActive >= MAX_ACTIVE_BROWSER_TASKS) continue
+      } else {
+        if (httpActive >= MAX_ACTIVE_HTTP_TASKS) continue
+      }
+
       resetExecutionState(task, now)
       markTaskRunning(task, now)
       activeExecutions.set(task.id, executeTask(task.id))
+      if (isBrowser) browserActive += 1
+      else httpActive += 1
       changed = true
     }
 

@@ -1,11 +1,18 @@
 import { desc, inArray } from 'drizzle-orm'
 import { getDb } from '../db/client'
-import { conversations as conversationsTable, tasks as tasksTable } from '../db/schema'
+import {
+  conversations as conversationsTable,
+  proxies as proxiesTable,
+  tasks as tasksTable,
+} from '../db/schema'
 import type {
   CatalogLimit,
   CollectMode,
   ConversationRecord,
   DatabaseShape,
+  ProxyRecord,
+  ProxyScheme,
+  ProxyStatus,
   TaskResultRow,
   TaskResultSummary,
   TaskRuntimeRecord,
@@ -30,6 +37,8 @@ const dirtyTaskIds = new Set<string>()
 const deletedTaskIds = new Set<string>()
 const dirtyConvIds = new Set<string>()
 const deletedConvIds = new Set<string>()
+const dirtyProxyIds = new Set<string>()
+const deletedProxyIds = new Set<string>()
 
 export function markTaskDirty(id: string): void {
   dirtyTaskIds.add(id)
@@ -49,6 +58,16 @@ export function markConversationDirty(id: string): void {
 export function markConversationDeleted(id: string): void {
   deletedConvIds.add(id)
   dirtyConvIds.delete(id)
+}
+
+export function markProxyDirty(id: string): void {
+  dirtyProxyIds.add(id)
+  deletedProxyIds.delete(id)
+}
+
+export function markProxyDeleted(id: string): void {
+  deletedProxyIds.add(id)
+  dirtyProxyIds.delete(id)
 }
 
 function normalizeResultRow(row: unknown): TaskResultRow | null {
@@ -173,16 +192,77 @@ function normalizeConversationRecord(row: ConversationDbRow): ConversationRecord
   }
 }
 
+interface ProxyDbRow {
+  id: unknown
+  userId: unknown
+  scheme: unknown
+  host: unknown
+  port: unknown
+  username: unknown
+  password: unknown
+  label: unknown
+  countryCode: unknown
+  status: unknown
+  latencyMs: unknown
+  lastCheckedAt: unknown
+  consecutiveFailures: unknown
+  createdAt: unknown
+}
+
+function normalizeProxyRecord(row: ProxyDbRow): ProxyRecord | null {
+  if (typeof row.id !== 'string' || typeof row.userId !== 'string') return null
+  if (typeof row.host !== 'string' || typeof row.port !== 'number') return null
+  if (row.scheme !== 'http' && row.scheme !== 'https') return null
+
+  const status: ProxyStatus =
+    row.status === 'online' || row.status === 'offline' || row.status === 'unknown'
+      ? row.status
+      : 'unknown'
+
+  const lastCheckedAt =
+    row.lastCheckedAt instanceof Date
+      ? row.lastCheckedAt.toISOString()
+      : typeof row.lastCheckedAt === 'string'
+        ? row.lastCheckedAt
+        : null
+
+  const createdAt =
+    row.createdAt instanceof Date
+      ? row.createdAt.toISOString()
+      : typeof row.createdAt === 'string'
+        ? row.createdAt
+        : new Date().toISOString()
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    scheme: row.scheme as ProxyScheme,
+    host: row.host,
+    port: row.port,
+    username: typeof row.username === 'string' ? row.username : null,
+    password: typeof row.password === 'string' ? row.password : null,
+    label: typeof row.label === 'string' ? row.label : null,
+    countryCode: typeof row.countryCode === 'string' ? row.countryCode : null,
+    status,
+    latencyMs: typeof row.latencyMs === 'number' ? row.latencyMs : null,
+    lastCheckedAt,
+    consecutiveFailures:
+      typeof row.consecutiveFailures === 'number' ? row.consecutiveFailures : 0,
+    createdAt,
+  }
+}
+
 async function fetchStateFromPg(): Promise<DatabaseShape | null> {
   const db = getDb()
   const now = Date.now()
 
-  const [taskRows, conversationRows] = await Promise.all([
+  const [taskRows, conversationRows, proxyRows] = await Promise.all([
     db.select().from(tasksTable).orderBy(desc(tasksTable.createdAt)),
     db.select().from(conversationsTable).orderBy(desc(conversationsTable.createdAt)),
+    db.select().from(proxiesTable).orderBy(desc(proxiesTable.createdAt)),
   ])
 
-  if (taskRows.length === 0 && conversationRows.length === 0) {
+  if (taskRows.length === 0 && conversationRows.length === 0 && proxyRows.length === 0) {
     return null
   }
 
@@ -194,7 +274,11 @@ async function fetchStateFromPg(): Promise<DatabaseShape | null> {
     .map((row: ConversationDbRow) => normalizeConversationRecord(row))
     .filter((c: ConversationRecord | null): c is ConversationRecord => c !== null)
 
-  return { tasks, conversations }
+  const proxies = proxyRows
+    .map((row: ProxyDbRow) => normalizeProxyRecord(row))
+    .filter((p: ProxyRecord | null): p is ProxyRecord => p !== null)
+
+  return { tasks, conversations, proxies }
 }
 
 function buildTaskInsertValues(task: TaskRuntimeRecord) {
@@ -224,6 +308,25 @@ function buildConversationInsertValues(conv: ConversationRecord) {
   }
 }
 
+function buildProxyInsertValues(proxy: ProxyRecord) {
+  return {
+    id: proxy.id,
+    userId: proxy.userId,
+    scheme: proxy.scheme,
+    host: proxy.host,
+    port: proxy.port,
+    username: proxy.username,
+    password: proxy.password,
+    label: proxy.label,
+    countryCode: proxy.countryCode,
+    status: proxy.status,
+    latencyMs: proxy.latencyMs,
+    lastCheckedAt: proxy.lastCheckedAt ? new Date(proxy.lastCheckedAt) : null,
+    consecutiveFailures: proxy.consecutiveFailures,
+    createdAt: new Date(Date.parse(proxy.createdAt) || Date.now()),
+  }
+}
+
 async function performSave(): Promise<void> {
   if (!state) {
     return
@@ -235,17 +338,23 @@ async function performSave(): Promise<void> {
   const localDeletedTasks = new Set(deletedTaskIds)
   const localDirtyConvs = new Set(dirtyConvIds)
   const localDeletedConvs = new Set(deletedConvIds)
+  const localDirtyProxies = new Set(dirtyProxyIds)
+  const localDeletedProxies = new Set(deletedProxyIds)
   dirtyTaskIds.clear()
   deletedTaskIds.clear()
   dirtyConvIds.clear()
   deletedConvIds.clear()
+  dirtyProxyIds.clear()
+  deletedProxyIds.clear()
 
   // 没有差异就直接 return,避免空事务
   if (
     localDirtyTasks.size === 0 &&
     localDeletedTasks.size === 0 &&
     localDirtyConvs.size === 0 &&
-    localDeletedConvs.size === 0
+    localDeletedConvs.size === 0 &&
+    localDirtyProxies.size === 0 &&
+    localDeletedProxies.size === 0
   ) {
     return
   }
@@ -261,6 +370,11 @@ async function performSave(): Promise<void> {
     const conv = state.conversations.find((c) => c.id === id)
     if (conv) convsToUpsert.push({ ...conv })
   }
+  const proxiesToUpsert: ProxyRecord[] = []
+  for (const id of localDirtyProxies) {
+    const proxy = state.proxies.find((p) => p.id === id)
+    if (proxy) proxiesToUpsert.push({ ...proxy })
+  }
 
   const db = getDb()
   try {
@@ -275,6 +389,9 @@ async function performSave(): Promise<void> {
         await tx
           .delete(conversationsTable)
           .where(inArray(conversationsTable.id, [...localDeletedConvs]))
+      }
+      if (localDeletedProxies.size > 0) {
+        await tx.delete(proxiesTable).where(inArray(proxiesTable.id, [...localDeletedProxies]))
       }
 
       // upsert:走单条 onConflictDoUpdate,事务里 Pipelined,代价远低于 truncate
@@ -309,6 +426,27 @@ async function performSave(): Promise<void> {
             },
           })
       }
+      for (const proxy of proxiesToUpsert) {
+        await tx
+          .insert(proxiesTable)
+          .values(buildProxyInsertValues(proxy))
+          .onConflictDoUpdate({
+            target: proxiesTable.id,
+            set: {
+              scheme: proxy.scheme,
+              host: proxy.host,
+              port: proxy.port,
+              username: proxy.username,
+              password: proxy.password,
+              label: proxy.label,
+              countryCode: proxy.countryCode,
+              status: proxy.status,
+              latencyMs: proxy.latencyMs,
+              lastCheckedAt: proxy.lastCheckedAt ? new Date(proxy.lastCheckedAt) : null,
+              consecutiveFailures: proxy.consecutiveFailures,
+            },
+          })
+      }
     })
   } catch (error) {
     // 写库失败:把 local 集合合回 dirty/deleted,下次 save 会重试。
@@ -317,6 +455,8 @@ async function performSave(): Promise<void> {
     for (const id of localDeletedTasks) if (!dirtyTaskIds.has(id)) deletedTaskIds.add(id)
     for (const id of localDirtyConvs) if (!deletedConvIds.has(id)) dirtyConvIds.add(id)
     for (const id of localDeletedConvs) if (!dirtyConvIds.has(id)) deletedConvIds.add(id)
+    for (const id of localDirtyProxies) if (!deletedProxyIds.has(id)) dirtyProxyIds.add(id)
+    for (const id of localDeletedProxies) if (!dirtyProxyIds.has(id)) deletedProxyIds.add(id)
     throw error
   }
 }
@@ -332,7 +472,7 @@ export async function loadDatabase(): Promise<DatabaseShape> {
     return state
   }
 
-  state = { tasks: [], conversations: [] }
+  state = { tasks: [], conversations: [], proxies: [] }
   return state
 }
 
@@ -371,4 +511,6 @@ export function resetInMemoryStateForTest() {
   deletedTaskIds.clear()
   dirtyConvIds.clear()
   deletedConvIds.clear()
+  dirtyProxyIds.clear()
+  deletedProxyIds.clear()
 }

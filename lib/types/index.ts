@@ -91,3 +91,41 @@ export interface NewConversationForm {
   urls: string[]
   taskIds: string[]
 }
+
+/* ==================== 代理池 ==================== */
+
+export type ProxyScheme = 'http' | 'https'
+export type ProxyStatus = 'online' | 'offline' | 'unknown'
+
+/**
+ * 代理池中的一条记录。
+ * 后端永远不会回传 password,改回传 hasPassword 表示是否有凭据;
+ * 想改密码就走"删除 + 新建"。
+ */
+export interface ProxyRecord {
+  id: string
+  userId?: string
+  scheme: ProxyScheme
+  host: string
+  port: number
+  username: string | null
+  /** 后端不回传具体值,用 hasPassword 区分 */
+  hasPassword: boolean
+  label: string | null
+  countryCode: string | null
+  status: ProxyStatus
+  latencyMs: number | null
+  lastCheckedAt: string | null
+  consecutiveFailures: number
+  createdAt: string
+}
+
+export interface NewProxyForm {
+  scheme: ProxyScheme
+  host: string
+  port: number
+  username?: string | null
+  password?: string | null
+  label?: string | null
+  countryCode?: string | null
+}
